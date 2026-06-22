@@ -29,6 +29,7 @@ export async function getInvoice(id: string, userId: string) {
     where: { id },
     include: {
       items: true,
+      payments: { orderBy: { paidAt: 'desc' } },
       apartment: { select: { unitLabel: true, building: { select: { name: true } } } },
     },
   });

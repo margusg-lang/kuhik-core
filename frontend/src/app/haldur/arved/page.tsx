@@ -62,6 +62,21 @@ export default function InvoicesPage() {
     if (data.success) setDetail(data.data);
   }
 
+  async function addPayment(amount: string) {
+    if (!amount || !detail) return;
+    const token = localStorage.getItem("kuhik_token");
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/v1/invoices/${detail.id}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ amount: parseFloat(amount) }),
+      });
+      const data = await res.json();
+      if (data.success) viewDetail(detail.id);
+    } catch {}
+  }
+
   return (
     <div className="p-8">
       <div className="mb-6">

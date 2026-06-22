@@ -21,6 +21,7 @@ import { registerReadingRoutes } from './modules/meter-readings/reading.routes.j
 import { registerCostRoutes } from './modules/utility-costs/cost.routes.js';
 import { registerAllocationRoutes } from './modules/allocation/allocation.routes.js';
 import { registerInvoiceRoutes } from './modules/invoices/invoices.routes.js';
+import { registerPaymentRoutes } from './modules/payments/payments.routes.js';
 
 // Initialize Prisma
 export const prisma = new PrismaClient();
@@ -116,6 +117,11 @@ async function bootstrap(): Promise<void> {
   await registerInvoiceRoutes(app);
 
   // ============================================================
+  // WAVE 7 — PAYMENT TRACKING
+  // ============================================================
+  await registerPaymentRoutes(app);
+
+  // ============================================================
   // START
   // ============================================================
   const port = config.port;
@@ -133,6 +139,7 @@ async function bootstrap(): Promise<void> {
     app.log.info('   Wave 4: utility cost ledger routes active');
     app.log.info('   Wave 5: allocation engine routes active');
     app.log.info('   Wave 6: invoice generation routes active');
+    app.log.info('   Wave 7: payment tracking routes active');
   } catch (err) {
     app.log.error(err);
     await prisma.$disconnect();

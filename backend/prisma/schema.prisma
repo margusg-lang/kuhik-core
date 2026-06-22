@@ -344,13 +344,14 @@ model KuhikInvoice {
   periodStart DateTime @map("period_start")
   periodEnd   DateTime @map("period_end")
   totalAmount Float    @default(0) @map("total_amount")
-  status      String   @default("draft")     // draft | issued
+  status      String   @default("draft")     // draft | issued | partially_paid | paid
   issuedAt    DateTime? @map("issued_at")
   createdAt   DateTime @default(now()) @map("created_at")
 
   tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   apartment Apartment          @relation(fields: [apartmentId], references: [id])
   items     KuhikInvoiceItem[]
+  payments  KuhikPayment[]
   run       AllocationRun      @relation(fields: [allocationRunId], references: [id])
 
   @@index([tenantId, apartmentId])
@@ -368,6 +369,25 @@ model KuhikInvoiceItem {
 
   @@index([invoiceId])
   @@map("kuhik_invoice_items")
+}
+
+// ============================================================
+// WAVE 7 — PAYMENTS (strict status tracking, no notifications)
+// ============================================================
+
+model KuhikPayment {
+  id        String   @id @default(cuid())
+  invoiceId String   @map("invoice_id")
+  amount    Float    @default(0)
+  paidAt    DateTime @default(now()) @map("paid_at")
+  method    String   @default("bank_transfer")  // bank_transfer | cash | other
+  reference String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  invoice KuhikInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("kuhik_payments")
 }
 
 // ============================================================
