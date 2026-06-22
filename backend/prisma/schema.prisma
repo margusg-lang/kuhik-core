@@ -1,0 +1,644 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH (NextAuth v5 / Auth.js) — kept as-is, required by auth
+// ============================================================
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================
+// MULTI-TENANT CORE
+// ============================================================
+
+model Tenant {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  registryCode  String?  @map("registry_code")
+  address       String?
+  contactEmail  String?  @map("contact_email")
+  contactPhone  String?  @map("contact_phone")
+  isActive      Boolean  @default(true) @map("is_active")
+  settings      Json?    @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  users           TenantUser[]
+  buildings       Building[]
+  apartments      Apartment[]
+  residents       Resident[]
+  resourceTypes   ResourceType[]
+  meters          Meter[]
+  meterReadings   MeterReading[]
+  events          Event[]
+  issues          Issue[]
+  allocationRules AllocationRule[]
+  costs           Cost[]
+  costAllocations CostAllocation[]
+  invoices        Invoice[]
+  invoiceLines    InvoiceLine[]
+  payments        Payment[]
+  bankTransactions BankTransaction[]
+  ownershipHistories OwnershipHistory[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  cronJobs        CronJob[]
+  meritSyncRecords MeritSyncRecord[]
+
+  @@map("tenants")
+}
+
+// --- TENANT USER ---
+model TenantUser {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  userId     String   @map("user_id")
+  role       String   @default("resident")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@map("tenant_users")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts     Account[]
+  sessions     Session[]
+  tenants      TenantUser[]
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+// --- BUILDING ---
+model Building {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  type        String   @default("apartment_building")
+  address     String?
+  metadata    Json?    @default("{}")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apartments    Apartment[]
+  resourceTypes ResourceType[]
+  meters        Meter[]
+  issues        Issue[]
+
+  @@map("buildings")
+}
+
+// --- APARTMENT ---
+model Apartment {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  buildingId   String   @map("building_id")
+  unitLabel    String   @map("unit_label")
+  floor        Int?
+  areaSqm      Float?   @map("area_sqm")
+  heatedAreaSqm Float?  @map("heated_area_sqm")
+  calculatedAreaSqm Float? @map("calculated_area_sqm")
+  occupancy    Int      @default(1)
+  ownershipShare Float? @map("ownership_share")
+  metadata     Json?    @default("{}")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building        Building         @relation(fields: [buildingId], references: [id])
+  residents       Resident[]
+  meters          Meter[]
+  meterReadings   MeterReading[]
+  costAllocations CostAllocation[]
+  invoices        Invoice[]
+  invoiceLines    InvoiceLine[]
+  issues          Issue[]
+  ownershipHistories OwnershipHistory[]
+
+  @@unique([buildingId, unitLabel])
+  @@map("apartments")
+}
+
+// --- RESIDENT ---
+model Resident {
+  id            String    @id @default(cuid())
+  tenantId      String    @map("tenant_id")
+  apartmentId   String?   @map("apartment_id")
+  userId        String?   @map("user_id")
+  fullName      String    @map("full_name")
+  email         String?
+  phone         String?
+  role          String    @default("resident")
+  isOwner       Boolean   @default(false) @map("is_owner")
+  isPrimary     Boolean   @default(false) @map("is_primary")
+  moveInDate    DateTime? @map("move_in_date")
+  moveOutDate   DateTime? @map("move_out_date")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  apartment Apartment? @relation(fields: [apartmentId], references: [id])
+
+  @@map("residents")
+}
+
+// --- RESOURCE TYPE ---
+model ResourceType {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  buildingId  String?  @map("building_id")
+  name        String
+  code        String?
+  category    String   @default("utility")
+  unitLabel   String   @default("units") @map("unit_label")
+  metadata    Json?    @default("{}")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building       Building?        @relation(fields: [buildingId], references: [id])
+  meters         Meter[]
+  allocationRules AllocationRule[]
+  costs          Cost[]
+  invoiceLines    InvoiceLine[]
+
+  @@unique([tenantId, code])
+  @@map("resource_types")
+}
+
+// --- METER ---
+model Meter {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  buildingId      String   @map("building_id")
+  resourceTypeId  String   @map("resource_type_id")
+  apartmentId     String?  @map("apartment_id")
+  serialNumber    String?  @map("serial_number")
+  label           String?
+  multiplier      Float    @default(1)
+  metadata        Json?    @default("{}")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building      Building       @relation(fields: [buildingId], references: [id])
+  resourceType  ResourceType   @relation(fields: [resourceTypeId], references: [id])
+  apartment     Apartment?     @relation(fields: [apartmentId], references: [id])
+  readings      MeterReading[]
+
+  @@map("meters")
+}
+
+// --- METER READING ---
+model MeterReading {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  meterId     String   @map("meter_id")
+  apartmentId String?  @map("apartment_id")
+  value       Float    @default(0)
+  readingDate DateTime @map("reading_date")
+  source      String   @default("manual")
+  isEstimated Boolean  @default(false) @map("is_estimated")
+  isAnomaly   Boolean  @default(false) @map("is_anomaly")
+  anomalyScore Float?  @map("anomaly_score")
+  metadata    Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  meter     Meter     @relation(fields: [meterId], references: [id])
+  apartment Apartment? @relation(fields: [apartmentId], references: [id])
+
+  @@index([meterId, readingDate])
+  @@map("meter_readings")
+}
+
+// ============================================================
+// EVENT STORE
+// ============================================================
+model Event {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  aggregateType String   @map("aggregate_type")
+  aggregateId   String   @map("aggregate_id")
+  eventType     String   @map("event_type")
+  data          Json?    @default("{}")
+  userId        String?  @map("user_id")
+  source        String   @default("system")
+  sequence      Int      @default(1)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([aggregateType, aggregateId, sequence])
+  @@index([tenantId, eventType])
+  @@index([tenantId, createdAt])
+  @@map("events")
+}
+
+// ============================================================
+// ISSUES
+// ============================================================
+model Issue {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  buildingId    String   @map("building_id")
+  apartmentId   String?  @map("apartment_id")
+  title         String
+  description   String?  @db.Text
+  category      String   @default("other")
+  severity      String   @default("normal")
+  status        String   @default("open")
+  assignedTo    String?  @map("assigned_to")
+  metadata      Json?    @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  building  Building       @relation(fields: [buildingId], references: [id])
+  apartment Apartment?     @relation(fields: [apartmentId], references: [id])
+  history   IssueHistory[]
+
+  @@map("issues")
+}
+
+model IssueHistory {
+  id        String   @id @default(cuid())
+  issueId   String   @map("issue_id")
+  fromStatus String? @map("from_status")
+  toStatus   String  @map("to_status")
+  changedBy String?  @map("changed_by")
+  comment   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("issue_histories")
+}
+
+// ============================================================
+// ALLOCATION RULES
+// ============================================================
+model AllocationRule {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  buildingId     String?  @map("building_id")
+  resourceTypeId String   @map("resource_type_id")
+  name           String
+  method         String   @default("equal")
+  params         Json?    @default("{}")
+  priority       Int      @default(0)
+  isActive       Boolean  @default(true) @map("is_active")
+  metadata       Json?    @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  resourceType ResourceType @relation(fields: [resourceTypeId], references: [id])
+  costs        Cost[]
+
+  @@map("allocation_rules")
+}
+
+// ============================================================
+// COSTS + ALLOCATIONS
+// ============================================================
+model Cost {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  resourceTypeId String   @map("resource_type_id")
+  allocationRuleId String? @map("allocation_rule_id")
+  description    String
+  amount         Float    @default(0)
+  taxAmount      Float    @default(0) @map("tax_amount")
+  totalAmount    Float    @default(0) @map("total_amount")
+  periodYear     Int?     @map("period_year")
+  periodMonth    Int?     @map("period_month")
+  supplierName   String?  @map("supplier_name")
+  invoiceNumber  String?  @map("invoice_number")
+  status         String   @default("pending")
+  metadata       Json?    @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  resourceType   ResourceType     @relation(fields: [resourceTypeId], references: [id])
+  allocationRule AllocationRule?  @relation(fields: [allocationRuleId], references: [id])
+  allocations    CostAllocation[]
+
+  @@map("costs")
+}
+
+model CostAllocation {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  costId        String   @map("cost_id")
+  apartmentId   String   @map("apartment_id")
+  amount        Float    @default(0)
+  taxAmount     Float    @default(0) @map("tax_amount")
+  totalAmount   Float    @default(0) @map("total_amount")
+  methodSnapshot  String? @map("method_snapshot")
+  paramsSnapshot  Json?   @map("params_snapshot")
+  metadata      Json?    @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cost      Cost      @relation(fields: [costId], references: [id])
+  apartment Apartment @relation(fields: [apartmentId], references: [id])
+
+  @@index([costId])
+  @@index([apartmentId])
+  @@map("cost_allocations")
+}
+
+// ============================================================
+// INVOICES
+// ============================================================
+model Invoice {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  apartmentId     String   @map("apartment_id")
+  invoiceNumber   String   @map("invoice_number")
+  referenceNumber String   @map("reference_number")
+  periodYear      Int      @map("period_year")
+  periodMonth     Int      @map("period_month")
+  issueDate       DateTime @map("issue_date")
+  dueDate         DateTime @map("due_date")
+  totalAmount     Float    @default(0) @map("total_amount")
+  vatAmount       Float    @default(0) @map("vat_amount")
+  grandTotal      Float    @default(0) @map("grand_total")
+  paidAmount      Float    @default(0) @map("paid_amount")
+  balanceDue      Float    @default(0) @map("balance_due")
+  status          String   @default("pending")
+  pdfPath         String?  @map("pdf_path")
+  emailSentAt     DateTime? @map("email_sent_at")
+  einvoiceSentAt  DateTime? @map("einvoice_sent_at")
+  metadata        Json?    @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apartment Apartment     @relation(fields: [apartmentId], references: [id])
+  lines     InvoiceLine[]
+  payments  Payment[]
+
+  @@index([tenantId, periodYear, periodMonth])
+  @@index([apartmentId])
+  @@index([referenceNumber])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id              String   @id @default(cuid())
+  invoiceId       String   @map("invoice_id")
+  tenantId        String   @map("tenant_id")
+  apartmentId     String   @map("apartment_id")
+  resourceTypeId  String?  @map("resource_type_id")
+  description     String
+  quantity        Float    @default(1)
+  unitPrice       Float    @default(0) @map("unit_price")
+  amount          Float    @default(0)
+  vatRate         Float    @default(0.22) @map("vat_rate")
+  vatAmount       Float    @default(0) @map("vat_amount")
+  totalAmount     Float    @default(0) @map("total_amount")
+  sortOrder       Int      @default(0) @map("sort_order")
+  metadata        Json?    @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  apartment     Apartment     @relation(fields: [apartmentId], references: [id])
+  resourceType  ResourceType? @relation(fields: [resourceTypeId], references: [id])
+
+  @@map("invoice_lines")
+}
+
+// ============================================================
+// PAYMENTS + BANK TRANSACTIONS
+// ============================================================
+model Payment {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  invoiceId       String?  @map("invoice_id")
+  apartmentId     String?  @map("apartment_id")
+  amount          Float    @default(0)
+  paymentDate     DateTime @map("payment_date")
+  method          String   @default("bank_transfer")
+  referenceNumber String?  @map("reference_number")
+  bankTransactionId String? @map("bank_transaction_id")
+  status          String   @default("pending")
+  matchedBy       String   @default("system") @map("matched_by")
+  metadata        Json?    @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice        Invoice?        @relation(fields: [invoiceId], references: [id])
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+
+  @@index([referenceNumber])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model BankTransaction {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  bankName        String   @map("bank_name")
+  accountNumber   String?  @map("account_number")
+  transactionRef  String?  @map("transaction_ref")
+  amount          Float    @default(0)
+  currency        String   @default("EUR")
+  transactionDate DateTime @map("transaction_date")
+  description     String?
+  referenceNumber String?  @map("reference_number")
+  counterpartyName String? @map("counterparty_name")
+  counterpartyIban String? @map("counterparty_iban")
+  isMatched       Boolean  @default(false) @map("is_matched")
+  importedAt      DateTime @default(now()) @map("imported_at")
+  metadata        Json?    @default("{}")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([referenceNumber])
+  @@index([transactionRef])
+  @@map("bank_transactions")
+}
+
+// ============================================================
+// OWNERSHIP HISTORY
+// ============================================================
+model OwnershipHistory {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  apartmentId String   @map("apartment_id")
+  ownerId     String   @map("owner_id")
+  ownerName   String   @map("owner_name")
+  share       Float    @default(1.0)
+  startDate   DateTime @map("start_date")
+  endDate     DateTime? @map("end_date")
+  isCurrent   Boolean  @default(true) @map("is_current")
+  reason      String   @default("purchase")
+  metadata    Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apartment Apartment @relation(fields: [apartmentId], references: [id])
+
+  @@index([apartmentId, isCurrent])
+  @@map("ownership_histories")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+model Notification {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  userId      String?  @map("user_id")
+  apartmentId String?  @map("apartment_id")
+  type        String   @default("info")
+  title       String
+  message     String?  @db.Text
+  link        String?
+  isRead      Boolean  @default(false) @map("is_read")
+  emailSent   Boolean  @default(false) @map("email_sent")
+  emailSentAt DateTime? @map("email_sent_at")
+  metadata    Json?    @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([tenantId, createdAt])
+  @@map("notifications")
+}
+
+// ============================================================
+// CRON JOBS
+// ============================================================
+model CronJob {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  jobType     String   @map("job_type")
+  status      String   @default("pending")
+  periodYear  Int?     @map("period_year")
+  periodMonth Int?     @map("period_month")
+  result      Json?    @default("{}")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  error       String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, jobType, status])
+  @@map("cron_jobs")
+}
+
+// ============================================================
+// MERIT SYNC RECORDS
+// ============================================================
+model MeritSyncRecord {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  direction   String   @default("export")
+  periodYear  Int?     @map("period_year")
+  periodMonth Int?     @map("period_month")
+  entryCount  Int      @default(0) @map("entry_count")
+  totalDebit  Float    @default(0) @map("total_debit")
+  totalCredit Float    @default(0) @map("total_credit")
+  status      String   @default("pending")
+  payload     Json?    @default("{}")
+  result      Json?    @default("{}")
+  error       String?  @db.Text
+  syncedAt    DateTime @default(now()) @map("synced_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, direction, status])
+  @@map("merit_sync_records")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+model AuditLog {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  userId          String?  @map("user_id")
+  action          String
+  entityType      String   @map("entity_type")
+  entityId        String?  @map("entity_id")
+  oldValues       Json?    @map("old_values")
+  newValues       Json?    @map("new_values")
+  source          String   @default("system")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
