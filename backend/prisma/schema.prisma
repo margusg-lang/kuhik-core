@@ -332,6 +332,45 @@ model AllocationItem {
 }
 
 // ============================================================
+// WAVE 6 — INVOICES (clean snapshot, no payment/billing fields)
+// ============================================================
+
+model KuhikInvoice {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  apartmentId String   @map("apartment_id")
+  allocationRunId String @map("allocation_run_id")
+  invoiceNumber String  @map("invoice_number")
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  totalAmount Float    @default(0) @map("total_amount")
+  status      String   @default("draft")     // draft | issued
+  issuedAt    DateTime? @map("issued_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apartment Apartment          @relation(fields: [apartmentId], references: [id])
+  items     KuhikInvoiceItem[]
+  run       AllocationRun      @relation(fields: [allocationRunId], references: [id])
+
+  @@index([tenantId, apartmentId])
+  @@map("kuhik_invoices")
+}
+
+model KuhikInvoiceItem {
+  id        String @id @default(cuid())
+  invoiceId String @map("invoice_id")
+  costType  String @map("cost_type")
+  amount    Float  @default(0)
+  source    String @default("allocation")  // allocation | manual
+
+  invoice KuhikInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("kuhik_invoice_items")
+}
+
+// ============================================================
 // RESIDENT (legacy — kept for migration compatibility)
 // ============================================================
 model Resident {
