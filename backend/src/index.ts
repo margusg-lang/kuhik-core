@@ -15,6 +15,11 @@ import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { registerOrganizationRoutes } from './modules/organizations/organization.routes.js';
 import { registerBuildingRoutes } from './modules/buildings/building.routes.js';
 import { registerApartmentRoutes } from './modules/apartments/apartment.routes.js';
+import { registerPersonRoutes } from './modules/people/person.routes.js';
+import { registerMeterRoutes } from './modules/apartment-meters/meter.routes.js';
+import { registerReadingRoutes } from './modules/meter-readings/reading.routes.js';
+import { registerCostRoutes } from './modules/utility-costs/cost.routes.js';
+import { registerAllocationRoutes } from './modules/allocation/allocation.routes.js';
 
 // Initialize Prisma
 export const prisma = new PrismaClient();
@@ -84,6 +89,27 @@ async function bootstrap(): Promise<void> {
   await registerApartmentRoutes(app);
 
   // ============================================================
+  // WAVE 2 — PEOPLE & ACCESS
+  // ============================================================
+  await registerPersonRoutes(app);
+
+  // ============================================================
+  // WAVE 3 — METERS & READINGS
+  // ============================================================
+  await registerMeterRoutes(app);
+  await registerReadingRoutes(app);
+
+  // ============================================================
+  // WAVE 4 — UTILITY COST LEDGER
+  // ============================================================
+  await registerCostRoutes(app);
+
+  // ============================================================
+  // WAVE 5 — ALLOCATION ENGINE
+  // ============================================================
+  await registerAllocationRoutes(app);
+
+  // ============================================================
   // START
   // ============================================================
   const port = config.port;
@@ -96,6 +122,10 @@ async function bootstrap(): Promise<void> {
     app.log.info('   JWT auth: enabled');
     app.log.info('   Wave 0: auth + health endpoints ready');
     app.log.info('   Wave 1: org/building/apartment routes active');
+    app.log.info('   Wave 2: people/apartment-relations routes active');
+    app.log.info('   Wave 3: meters/readings routes active');
+    app.log.info('   Wave 4: utility cost ledger routes active');
+    app.log.info('   Wave 5: allocation engine routes active');
   } catch (err) {
     app.log.error(err);
     await prisma.$disconnect();

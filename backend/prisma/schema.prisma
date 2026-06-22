@@ -70,6 +70,8 @@ model Tenant {
   buildings       Building[]
   apartments      Apartment[]
   residents       Resident[]
+  people          Person[]
+  apartmentPeople ApartmentPerson[]
   resourceTypes   ResourceType[]
   meters          Meter[]
   meterReadings   MeterReading[]
@@ -126,7 +128,52 @@ model User {
   @@map("users")
 }
 
-// --- BUILDING ---
+// ============================================================
+// WAVE 2 — PEOPLE / CONTACTS
+// ============================================================
+
+model Person {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  fullName     String   @map("full_name")
+  email        String?
+  phone        String?
+  personalCode String?  @map("personal_code")
+  notes        String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apartments    ApartmentPerson[]
+
+  @@index([tenantId])
+  @@map("people")
+}
+
+model ApartmentPerson {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  apartmentId      String   @map("apartment_id")
+  personId         String   @map("person_id")
+  relationshipType String   @default("RESIDENT") @map("relationship_type") // OWNER | RESIDENT | CONTACT
+  isPrimary        Boolean  @default(false) @map("is_primary")
+  validFrom        DateTime? @map("valid_from")
+  validTo          DateTime? @map("valid_to")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apartment Apartment @relation(fields: [apartmentId], references: [id])
+  person    Person    @relation(fields: [personId], references: [id])
+
+  @@unique([apartmentId, personId, relationshipType])
+  @@index([personId])
+  @@map("apartment_people")
+}
+
+// ============================================================
+// BUILDING
+// ============================================================
 model Building {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
@@ -147,7 +194,9 @@ model Building {
   @@map("buildings")
 }
 
-// --- APARTMENT ---
+// ============================================================
+// APARTMENT
+// ============================================================
 model Apartment {
   id           String   @id @default(cuid())
   tenantId     String   @map("tenant_id")
@@ -167,6 +216,7 @@ model Apartment {
   tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   building        Building         @relation(fields: [buildingId], references: [id])
   residents       Resident[]
+  people          ApartmentPerson[]
   meters          Meter[]
   meterReadings   MeterReading[]
   costAllocations CostAllocation[]
@@ -179,7 +229,111 @@ model Apartment {
   @@map("apartments")
 }
 
-// --- RESIDENT ---
+// ============================================================
+// WAVE 3 — METERS (pure measurement, no billing coupling)
+// ============================================================
+
+model ApartmentMeter {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  apartmentId  String   @map("apartment_id")
+  meterType    String   @map("meter_type")    // water | electricity | heating | gas
+  unit         String   @default("m3")        // m3 | kWh | etc
+  serialNumber String?  @map("serial_number")
+  label        String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apartment Apartment               @relation(fields: [apartmentId], references: [id])
+  readings  ApartmentMeterReading[]
+
+  @@index([apartmentId])
+  @@map("apartment_meters")
+}
+
+model ApartmentMeterReading {
+  id        String   @id @default(cuid())
+  meterId   String   @map("meter_id")
+  tenantId  String   @map("tenant_id")
+  value     Float    @default(0)
+  timestamp DateTime @default(now())
+  source    String   @default("manual")    // manual | import
+  createdAt DateTime @default(now()) @map("created_at")
+
+  meter ApartmentMeter @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([meterId, timestamp])
+  @@map("apartment_meter_readings")
+}
+
+// ============================================================
+// WAVE 4 — UTILITY COSTS (pure ledger, no allocation/billing)
+// ============================================================
+
+model UtilityCost {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  type         String   @default("other")    // electricity | water | heating | gas | other
+  periodStart  DateTime @map("period_start")
+  periodEnd    DateTime @map("period_end")
+  totalAmount  Float    @map("total_amount")
+  currency     String   @default("EUR")
+  supplierName String?  @map("supplier_name")
+  description  String?  @db.Text
+  source       String   @default("manual")   // manual | import
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, periodStart])
+  @@map("utility_costs")
+}
+
+// ============================================================
+// WAVE 5 — ALLOCATION (pure computation, no billing/invoices)
+// ============================================================
+
+model AllocationRun {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  periodStart DateTime @map("period_start")
+  periodEnd  DateTime @map("period_end")
+  status     String   @default("draft")    // draft | finalized
+  meta       Json?    @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items  AllocationItem[]
+
+  @@index([tenantId, periodStart])
+  @@map("allocation_runs")
+}
+
+model AllocationItem {
+  id             String   @id @default(cuid())
+  runId          String   @map("run_id")
+  apartmentId    String   @map("apartment_id")
+  costType       String   @map("cost_type")     // electricity | water | heating | gas | other
+  method         String   @default("flat")      // meter_based | flat
+  amount         Float    @default(0)
+  consumptionPct Float?   @map("consumption_pct") // for debugging: % of total consumption
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  run       AllocationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  apartment Apartment     @relation(fields: [apartmentId], references: [id])
+
+  @@index([runId])
+  @@index([apartmentId])
+  @@map("allocation_items")
+}
+
+// ============================================================
+// RESIDENT (legacy — kept for migration compatibility)
+// ============================================================
 model Resident {
   id            String    @id @default(cuid())
   tenantId      String    @map("tenant_id")
@@ -202,7 +356,10 @@ model Resident {
   @@map("residents")
 }
 
-// --- RESOURCE TYPE ---
+// ============================================================
+// RESOURCE TYPE, METER, METER READING, EVENT, ISSUE
+// (unchanged from Wave 0/1 — kept for schema completeness)
+// ============================================================
 model ResourceType {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
@@ -227,7 +384,6 @@ model ResourceType {
   @@map("resource_types")
 }
 
-// --- METER ---
 model Meter {
   id              String   @id @default(cuid())
   tenantId        String   @map("tenant_id")
@@ -251,7 +407,6 @@ model Meter {
   @@map("meters")
 }
 
-// --- METER READING ---
 model MeterReading {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
@@ -274,9 +429,6 @@ model MeterReading {
   @@map("meter_readings")
 }
 
-// ============================================================
-// EVENT STORE
-// ============================================================
 model Event {
   id            String   @id @default(cuid())
   tenantId      String   @map("tenant_id")
@@ -297,9 +449,6 @@ model Event {
   @@map("events")
 }
 
-// ============================================================
-// ISSUES
-// ============================================================
 model Issue {
   id            String   @id @default(cuid())
   tenantId      String   @map("tenant_id")
@@ -337,9 +486,6 @@ model IssueHistory {
   @@map("issue_histories")
 }
 
-// ============================================================
-// ALLOCATION RULES
-// ============================================================
 model AllocationRule {
   id             String   @id @default(cuid())
   tenantId       String   @map("tenant_id")
@@ -361,9 +507,6 @@ model AllocationRule {
   @@map("allocation_rules")
 }
 
-// ============================================================
-// COSTS + ALLOCATIONS
-// ============================================================
 model Cost {
   id             String   @id @default(cuid())
   tenantId       String   @map("tenant_id")
@@ -412,9 +555,6 @@ model CostAllocation {
   @@map("cost_allocations")
 }
 
-// ============================================================
-// INVOICES
-// ============================================================
 model Invoice {
   id              String   @id @default(cuid())
   tenantId        String   @map("tenant_id")
@@ -474,9 +614,6 @@ model InvoiceLine {
   @@map("invoice_lines")
 }
 
-// ============================================================
-// PAYMENTS + BANK TRANSACTIONS
-// ============================================================
 model Payment {
   id              String   @id @default(cuid())
   tenantId        String   @map("tenant_id")
@@ -527,9 +664,6 @@ model BankTransaction {
   @@map("bank_transactions")
 }
 
-// ============================================================
-// OWNERSHIP HISTORY
-// ============================================================
 model OwnershipHistory {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
@@ -551,9 +685,6 @@ model OwnershipHistory {
   @@map("ownership_histories")
 }
 
-// ============================================================
-// NOTIFICATIONS
-// ============================================================
 model Notification {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
@@ -576,9 +707,6 @@ model Notification {
   @@map("notifications")
 }
 
-// ============================================================
-// CRON JOBS
-// ============================================================
 model CronJob {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
@@ -598,9 +726,6 @@ model CronJob {
   @@map("cron_jobs")
 }
 
-// ============================================================
-// MERIT SYNC RECORDS
-// ============================================================
 model MeritSyncRecord {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
@@ -622,9 +747,6 @@ model MeritSyncRecord {
   @@map("merit_sync_records")
 }
 
-// ============================================================
-// AUDIT LOG
-// ============================================================
 model AuditLog {
   id              String   @id @default(cuid())
   tenantId        String   @map("tenant_id")

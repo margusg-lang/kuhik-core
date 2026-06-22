@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Building2, Home, Plus } from "lucide-react";
+import { Building2, Home, Plus, Users } from "lucide-react";
 
 export default function OrgDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [orgId, setOrgId] = useState("");
@@ -52,10 +52,11 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
           <h3 className="font-semibold text-slate-900">Hooned ja korterid</h3>
           <p className="mt-1 text-xs text-slate-500">{buildings.length} hoonet</p>
         </Link>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 opacity-50">
-          <h3 className="font-semibold text-slate-400">Elanikud</h3>
-          <p className="mt-1 text-xs text-slate-400">📋 Wave 2</p>
-        </div>
+        <Link href={`/haldur/uhistud/${orgId}/inimesed`} className="rounded-xl border border-green-200 bg-green-50 p-5 hover:shadow-md transition-all">
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-600"><Users className="h-5 w-5" /></div>
+          <h3 className="font-semibold text-slate-900">Elanikud ja kontaktid</h3>
+          <p className="mt-1 text-xs text-slate-500">Isikud ja korterite seosed</p>
+        </Link>
         <div className="rounded-xl border border-slate-200 bg-white p-5 opacity-50">
           <h3 className="font-semibold text-slate-400">Näidud</h3>
           <p className="mt-1 text-xs text-slate-400">📋 Wave 2+</p>
