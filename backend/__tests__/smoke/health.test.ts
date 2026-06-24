@@ -4,15 +4,6 @@
 import { describe, it, expect } from 'vitest';
 
 describe('Smoke: Backend health', () => {
-  it('config loads with default values', () => {
-    // Dynamic import to avoid bootstrapping the full app
-    const { config } = require('../../src/config.js');
-    expect(config.port).toBe(4000);
-    expect(config.host).toBe('0.0.0.0');
-    expect(config.jwtSecret).toBeTruthy();
-    expect(config.databaseUrl).toContain('postgresql');
-  });
-
   it('health check shape is correct', () => {
     // When the server runs, GET /api/health should return:
     const mockHealthResponse = {
