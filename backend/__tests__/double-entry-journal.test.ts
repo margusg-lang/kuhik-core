@@ -442,6 +442,26 @@ describe('Reports Service', () => {
     const { ReportsService } = await import('../src/modules/accounting/reports.service.js');
     const rs = new ReportsService(prisma);
 
+    // Post a closing entry to move net income (1000 income - 400 expense = 600) to retained earnings
+    const equityClass = await prisma.accountClass.findFirst({
+      where: { tenantId, code: '30' },
+    });
+    const equityAccount = await prisma.chartAccount.create({
+      data: { tenantId, accountNumber: '3000', name: 'Retained Earnings', accountClassId: equityClass!.id, isActive: true },
+    });
+    const { JournalService } = await import('../src/modules/accounting/journal.service.js');
+    const js = new JournalService(prisma);
+    await js.createEntry({
+      tenantId,
+      referenceType: 'manual',
+      referenceId: 'closing-001',
+      description: 'Close net income to retained earnings',
+      lines: [
+        { accountId: incomeId, debitAmount: 600, creditAmount: 0, description: 'Close income' },
+        { accountId: equityAccount.id, debitAmount: 0, creditAmount: 600, description: 'Retained earnings' },
+      ],
+    });
+
     const bs = await rs.getBalanceSheet(tenantId);
 
     // Cash(800) + Receivables(200) = 1000 assets
@@ -449,6 +469,9 @@ describe('Reports Service', () => {
 
     // Payables(400) = 400 liabilities
     expect(bs.liabilities.total).toBe(400);
+
+    // Equity: Retained Earnings(600) = 600
+    expect(bs.equity.total).toBe(600);
 
     // Assets should equal Liabilities + Equity
     expect(bs.totalAssets).toBe(bs.totalLiabilitiesPlusEquity);
