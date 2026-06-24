@@ -60,7 +60,7 @@ describe("Level 3 — Traceability Audit", () => {
     const period = await prisma.accountingPeriod.create({
       data: {
         tenantId, periodYear: 2026, periodMonth: 6,
-        startDate: new Date("2026-06-01"), endDate: new Date("2026-06-30"), status: "open",
+        startDate: new Date("2026-06-01"), endDate: new Date("2026-06-30"), status: "ACTIVE",
       },
     });
     periodId = period.id;

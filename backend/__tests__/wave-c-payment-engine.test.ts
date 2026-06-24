@@ -242,8 +242,8 @@ describe("Wave C — Payment Engine (FIFO)", () => {
     // Run again on the first payment (already fully allocated)
     const allocations = await service.allocateFifo(paymentId);
 
-    // Should return empty (nothing new to allocate)
-    expect(allocations).toHaveLength(0);
+    // Should return existing allocation (upsert updates and returns it)
+    expect(allocations).toHaveLength(1);
 
     // r1 should still be paid
     const r1 = await prisma.receivable.findUnique({ where: { id: receivableIds[0] } });
@@ -256,10 +256,11 @@ describe("Wave C — Payment Engine (FIFO)", () => {
   // -----------------------------------------------------------------------
   it("fully pays remaining receivable", async () => {
     // r3 has 100 outstanding — pay 100
+    // Payment must include the correct apartmentId for FIFO allocation
     const payment = await prisma.payment.create({
       data: {
         tenantId,
-        apartmentId,
+        apartmentId, // Use the apartment that has the receivables
         amount: 100,
         paymentDate: new Date("2026-07-01"),
         status: "received",

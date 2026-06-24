@@ -77,7 +77,7 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
         periodMonth: 6,
         startDate: new Date("2026-06-01"),
         endDate: new Date("2026-06-30"),
-        status: "open",
+        status: "ACTIVE",
       },
     });
     periodId = period.id;
@@ -176,7 +176,7 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
     expect(result.totalSourceAmount).toBe(1000);
     expect(result.totalAllocatedAmount).toBe(1000);
     expect(result.items).toHaveLength(4);
-    result.items.forEach(item => expect(item.amount).toBe(250)); // 1000 / 4 = 250
+    result.items.forEach(item => expect(item.amount).toBe(250));
 
     allocRunId = result.runId;
   });
@@ -185,7 +185,6 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
   // STEP 3: ChargeLine → Receivable (Wave C)
   // -----------------------------------------------------------------------
   it("STEP 3 — creates charge lines and receivables", async () => {
-    // Create charge lines from allocation
     const chargeCount = await prepareChargeLines(allocRunId);
     expect(chargeCount).toBe(4);
 
@@ -195,10 +194,17 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
     });
     expect(chargeLines).toHaveLength(4);
 
-    // Create receivables from charge lines
+    // Create receivables from charge lines, then set due date to past for penalty testing
     const service = new ReceivableCreationService(prisma);
     const recIds = await service.createFromChargeLines(chargeLines.map(cl => cl.id));
     expect(recIds).toHaveLength(4);
+
+    // Set dueDate to BEFORE period month start so PenaltyEngine finds overdue receivables
+    // PenaltyEngine filters: dueDate < "2026-06-01" for period 2026/6
+    await prisma.receivable.updateMany({
+      where: { id: { in: recIds } },
+      data: { dueDate: new Date("2026-05-15") }, // Before June 1st = overdue for June period
+    });
 
     // Verify: total = 1000
     const receivables = await prisma.receivable.findMany({
@@ -207,7 +213,6 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
     const sum = receivables.reduce((s, r) => s + r.amountOriginal, 0);
     expect(sum).toBe(1000);
 
-    // All should be OPEN, 250 each
     for (const r of receivables) {
       expect(r.amountOriginal).toBe(250);
       expect(r.amountOutstanding).toBe(250);
@@ -237,12 +242,10 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
       },
     });
 
-    // Allocate via FIFO
     const service = new PaymentAllocationService(prisma);
     const allocations = await service.allocateFifo(payment.id);
     expect(allocations).toHaveLength(1);
 
-    // Verify: receivable is now PAID
     const updated = await prisma.receivable.findUnique({ where: { id: receivable!.id } });
     expect(updated!.amountPaid).toBe(250);
     expect(updated!.amountOutstanding).toBe(0);
@@ -277,11 +280,9 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
     const engine = new PenaltyEngine(prisma);
     const count = await engine.generatePenalties(tenantId, 2026, 6, 0.08);
 
-    // 3 unpaid receivables should get penalties
     expect(count).toBeGreaterThanOrEqual(1);
     expect(count).toBeLessThanOrEqual(3);
 
-    // Idempotent: second run should produce 0
     const count2 = await engine.generatePenalties(tenantId, 2026, 6, 0.08);
     expect(count2).toBe(0);
   });
@@ -302,9 +303,7 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
     expect(totalReceivables).toBe(1000);
     expect(totalPayments).toBe(250);
     expect(totalOutstanding).toBe(750);
-    expect(totalPenalties).toBeGreaterThan(0);
 
-    // Create snapshot
     const snapshot = await prisma.financialSnapshot.create({
       data: {
         tenantId,
@@ -315,9 +314,6 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
           totalPayments,
           totalOutstanding,
           totalPenalties,
-          receivableCount: receivables.length,
-          paidCount: receivables.filter(r => r.status === "paid").length,
-          openCount: receivables.filter(r => r.status === "open").length,
         },
         totalReceivables,
         totalPayments,
@@ -332,17 +328,16 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
     expect(snapshot.totalReceivables).toBe(1000);
     expect(snapshot.totalPayments).toBe(250);
     expect(snapshot.totalOutstanding).toBe(750);
+    expect(snapshot.totalPenalties).toBeGreaterThan(0);
 
-    // Period close
     await prisma.accountingPeriod.update({
       where: { id: periodId },
-      data: { status: "closed" },
+      data: { status: "CLOSED" },
     });
 
     const period = await prisma.accountingPeriod.findUnique({ where: { id: periodId } });
-    expect(period!.status).toBe("closed");
+    expect(period!.status).toBe("CLOSED");
 
-    // PeriodClose record
     const close = await prisma.periodClose.create({
       data: {
         periodId,
@@ -361,7 +356,6 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
   // STEP 8: Traceability — Cost → Snapshot
   // -----------------------------------------------------------------------
   it("STEP 8 — full traceability: Cost → AllocationRun → ChargeLine → Receivable → Payment → Snapshot", async () => {
-    // Pick a random receivable
     const receivables = await prisma.receivable.findMany({
       where: { tenantId },
       include: {
@@ -384,7 +378,6 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
       },
     });
 
-    // Every receivable must have a charge line with traceability
     for (const rec of receivables) {
       expect(rec.chargeLine).toBeDefined();
       expect(rec.chargeLine!.allocationItem).toBeDefined();
@@ -392,7 +385,6 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
       expect(rec.chargeLine!.allocationItem!.run.sourceCosts[0].cost.totalAmount).toBe(1000);
     }
 
-    // Snapshot exists and matches
     const snapshot = await prisma.financialSnapshot.findFirst({
       where: { periodId },
     });
@@ -400,7 +392,6 @@ describe("E2E — Full Lifecycle (Cost → Snapshot)", () => {
     expect(snapshot!.totalReceivables).toBe(1000);
     expect(snapshot!.totalPayments).toBe(250);
 
-    // Period links to snapshot
     const period = await prisma.accountingPeriod.findUnique({
       where: { id: periodId },
       include: { close: true, snapshots: true },
