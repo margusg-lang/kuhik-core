@@ -27,37 +27,61 @@ type TxClient = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transa
 export async function addPayment(invoiceId: string, data: { amount: number; method?: string; reference?: string | null }, userId: string) {
   const invoice = await prisma.kuhikInvoice.findUnique({
     where: { id: invoiceId },
-    select: { tenantId: true, apartmentId: true, totalAmount: true, paidAmount: true, status: true },
+    select: { tenantId: true, apartmentId: true, totalAmount: true, status: true },
   });
   if (!invoice) throw new AppError(404, 'NOT_FOUND', 'Arvet ei leitud');
   await requireTenantAccess(invoice.tenantId, userId);
 
+  // Calculate total paid so far from existing payments
+  const existingPayments = await prisma.kuhikPayment.findMany({
+    where: { invoiceId },
+    select: { amount: true },
+  });
+  const paidSoFar = existingPayments.reduce((s, p) => s + p.amount, 0);
+  const newPaid = paidSoFar + data.amount;
+
   // Validate no overpayment
-  const newPaid = (invoice.paidAmount || 0) + data.amount;
   if (newPaid > invoice.totalAmount + 0.01) {
     throw new AppError(400, 'OVERPAYMENT', 'Makse summa ületab arve saldot');
   }
 
-  const payment = await prisma.payment.create({
+  const payment = await prisma.kuhikPayment.create({
     data: {
-      tenantId: invoice.tenantId,
-      apartmentId: invoice.apartmentId,
       invoiceId,
       amount: data.amount,
       method: data.method || 'bank_transfer',
       reference: data.reference || null,
-      paymentDate: new Date(),
-      status: 'received',
-      allocationState: 'unallocated',
     },
   });
 
-  // Recalc invoice status
+  // Recalc invoice status (stored in new Payment model, update invoice status)
   const newStatus = newPaid >= invoice.totalAmount - 0.01 ? 'paid' : (newPaid > 0 ? 'partially_paid' : 'issued');
   await prisma.kuhikInvoice.update({
     where: { id: invoiceId },
-    data: { paidAmount: newPaid, status: newStatus },
+    data: { status: newStatus },
   });
+
+  // Also create legacy Payment record for backward compatibility (FIFO uses this model)
+  let legacyPaymentId: string | null = null;
+  try {
+    const legacyPayment = await prisma.payment.create({
+      data: {
+        tenantId: invoice.tenantId,
+        apartmentId: invoice.apartmentId,
+        invoiceId,
+        amount: data.amount,
+        method: data.method || 'bank_transfer',
+        reference: data.reference || null,
+        paymentDate: new Date(),
+        status: 'received',
+        allocationState: 'unallocated',
+      },
+    });
+    legacyPaymentId = legacyPayment.id;
+  } catch (e) {
+    // Non-blocking
+    console.warn(`[Payment] Warning: legacy payment record:`, (e as Error).message);
+  }
 
   // Post double-entry journal entry for this payment
   try {
@@ -85,10 +109,12 @@ export async function addPayment(invoiceId: string, data: { amount: number; meth
     console.warn(`[Journal] Warning for payment ${payment.id}:`, (e as Error).message);
   }
 
-  // Run FIFO allocation using Wave C service
+  // Run FIFO allocation using Wave C service (via legacy Payment model)
   try {
-    const allocService = new PaymentAllocationService(prisma as any);
-    await allocService.allocateFifo(payment.id);
+    if (legacyPaymentId) {
+      const allocService = new PaymentAllocationService(prisma as any);
+      await allocService.allocateFifo(legacyPaymentId);
+    }
   } catch (e) {
     // Non-blocking: payment recorded, allocation can be retried
     console.warn(`[Payment] FIFO allocation warning for ${payment.id}:`, (e as Error).message);
@@ -102,9 +128,9 @@ export async function listInvoicePayments(invoiceId: string, userId: string) {
   if (!invoice) throw new AppError(404, 'NOT_FOUND', 'Arvet ei leitud');
   await requireTenantAccess(invoice.tenantId, userId);
 
-  return prisma.payment.findMany({
+  return prisma.kuhikPayment.findMany({
     where: { invoiceId },
-    orderBy: { paymentDate: 'desc' },
+    orderBy: { paidAt: 'desc' },
   });
 }
 
