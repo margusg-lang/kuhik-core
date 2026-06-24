@@ -16,6 +16,7 @@ import { config } from './config.js';
 import { registerAuthPlugin } from './plugins/auth.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
 import { registerRequestLogger } from './plugins/request-logger.js';
+import { registerSwagger } from './plugins/swagger.js';
 import { registerQueuePlugin } from './plugins/queues.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { registerOrganizationRoutes } from './modules/organizations/organization.routes.js';
@@ -79,7 +80,10 @@ async function bootstrap(): Promise<void> {
   // 6. Custom error handler
   await registerErrorHandler(app);
 
-  // 7. Queue plugin (BullMQ) — graceful if Redis unavailable
+  // 7. Swagger / OpenAPI documentation
+  await registerSwagger(app);
+
+  // 8. Queue plugin (BullMQ) — graceful if Redis unavailable
   await registerQueuePlugin(app);
 
   // ============================================================
@@ -168,6 +172,7 @@ async function bootstrap(): Promise<void> {
     app.log.info('   Wave 8: resident self-service routes active');
     app.log.info('   Wave 9: production hardening active');
     app.log.info('   Wave D: accounting reports active');
+    app.log.info('   Swagger docs: http://localhost:4000/docs');
   } catch (err) {
     app.log.error(err);
     await prisma.$disconnect();
