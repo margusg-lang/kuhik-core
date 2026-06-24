@@ -1,14 +1,23 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { UserPlus } from "lucide-react";
+import { Icon } from "@/components/haldur/Icons";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
+import ContextHeader from "@/components/haldur/ContextHeader";
 
-export default function PeopleListPage({ params }: { params: Promise<{ id: string }> }) {
+export default function PeopleListPage({ params }: { params: { id: string } }) {
   const [orgId, setOrgId] = useState("");
+
+  useEffect(() => {
+    if (params && typeof params === "object") {
+      setOrgId((params as { id: string }).id || "");
+    }
+  }, [params]);
+
+  const [orgName, setOrgName] = useState("");
   const [people, setPeople] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Create person form state
   const [showForm, setShowForm] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -16,19 +25,18 @@ export default function PeopleListPage({ params }: { params: Promise<{ id: strin
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    params.then(p => setOrgId(p.id));
-  }, [params]);
-
-  useEffect(() => {
     if (!orgId) return;
     const token = localStorage.getItem("kuhik_token");
     if (!token) return;
 
-    fetch(`/api/v1/organizations/${orgId}/people`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(data => { if (data.success) setPeople(data.data); })
+    Promise.all([
+      fetch(`/api/v1/organizations/${orgId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`/api/v1/organizations/${orgId}/people`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+    ])
+      .then(([orgData, peopleData]) => {
+        if (orgData.success) setOrgName(orgData.data.name);
+        if (peopleData.success) setPeople(peopleData.data);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [orgId]);
@@ -58,16 +66,21 @@ export default function PeopleListPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="p-8">
-      <Link href={`/haldur/uhistud/${orgId}`} className="text-sm text-brand-600 hover:underline">← Tagasi ühistu juurde</Link>
-      <div className="mt-4 mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Isikud ja kontaktid</h1>
-          <p className="text-slate-600 text-sm mt-1">Kõik selle organisatsiooniga seotud inimesed</p>
-        </div>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">
-          <UserPlus className="h-4 w-4" /> {showForm ? "Sulge" : "Lisa isik"}
-        </button>
-      </div>
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Korteriühistud", href: "/haldur/uhistud" },
+        { label: orgName || "Ühistu", href: `/haldur/uhistud/${orgId}` },
+        { label: "Inimesed" },
+      ]} />
+
+      <ContextHeader
+        entityName="Isikud ja kontaktid"
+        entityType="Inimene"
+        parentContext={orgName || undefined}
+        actions={[
+          { label: "Lisa isik", variant: "primary" as const, icon: "Plus" },
+        ]}
+      />
 
       {showForm && (
         <form onSubmit={handleCreate} className="mb-8 rounded-xl border border-brand-200 bg-brand-50 p-6 space-y-3">

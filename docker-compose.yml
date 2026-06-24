@@ -1,0 +1,124 @@
+# kuhik-core Production Docker Compose
+# Starts full stack: Postgres + Backend + Frontend + Caddy reverse proxy
+# Usage: docker-compose up --build -d
+
+services:
+  # ============================================================
+  # DATABASE
+  # ============================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: kuhik-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kuhik
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kuhik_secret}
+      POSTGRES_DB: kuhik
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kuhik"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kuhik-net
+
+  # ============================================================
+  # BACKEND API
+  # ============================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kuhik-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      HOST: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL:-postgresql://kuhik:${POSTGRES_PASSWORD:-kuhik_secret}@postgres:5432/kuhik}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://app.example.com}
+      RATE_LIMIT_MAX: "100"
+      RATE_LIMIT_WINDOW: "1 minute"
+      STORAGE_TYPE: local
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads_data:/data/uploads
+    ports:
+      - "127.0.0.1:4000:4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/health').then(r => process.exit(r.ok?0:1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - kuhik-net
+
+  # ============================================================
+  # FRONTEND (Next.js)
+  # ============================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://app.example.com}
+    container_name: kuhik-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      INTERNAL_API_URL: http://backend:4000
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r => process.exit(r.ok?0:1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - kuhik-net
+
+  # ============================================================
+  # REVERSE PROXY (Caddy)
+  # ============================================================
+  caddy:
+    image: caddy:2-alpine
+    container_name: kuhic-caddy
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - kuhik-net
+
+volumes:
+  postgres_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  kuhik-net:
+    driver: bridge

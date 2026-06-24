@@ -57,10 +57,12 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       const selectedTenant = activeTenants[0];
 
       const tokenData = {
-        userId: user.id,
-        username: user.name || user.email || 'unknown',
+        id: user.id,
+        email: user.email || '',
+        name: user.name || user.email || 'unknown',
         role: selectedTenant?.role || 'resident',
-        tenantId: selectedTenant?.tenantId || null,
+        associationId: selectedTenant?.tenantId || null,
+        permissions: [],
       };
 
       // Sign JWT
@@ -105,6 +107,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
+      if (!tenantId) {
+        return reply.status(400).send({ success: false, error: 'Registreerimiseks on vajalik ühistu ID' });
+      }
+
       const user = await prisma.user.create({
         data: {
           name,
@@ -112,7 +118,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           password: hashedPassword,
           tenants: {
             create: {
-              tenantId: tenantId || 'demo-org',
+              tenantId,
               role: 'resident',
             },
           },

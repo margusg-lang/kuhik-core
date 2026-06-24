@@ -14,8 +14,8 @@ export async function registerCostRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ success: true, data: costs });
   });
 
-  // GET /api/v1/utility-costs/:id — get single cost
-  app.get('/api/v1/utility-costs/:id', async (request, reply) => {
+  // GET /api/v1/organizations/:orgId/costs/:id — get single cost
+  app.get('/api/v1/organizations/:orgId/costs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const cost = await getCost(id, request.userId);
     return reply.send({ success: true, data: cost });
@@ -29,16 +29,16 @@ export async function registerCostRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(201).send({ success: true, data: cost });
   });
 
-  // PUT /api/v1/utility-costs/:id — update cost
-  app.put('/api/v1/utility-costs/:id', async (request, reply) => {
+  // PUT /api/v1/organizations/:orgId/costs/:id — update cost
+  app.put('/api/v1/organizations/:orgId/costs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = updateCostSchema.parse(request.body);
     const cost = await updateCost(id, body, request.userId);
     return reply.send({ success: true, data: cost });
   });
 
-  // DELETE /api/v1/utility-costs/:id — delete cost
-  app.delete('/api/v1/utility-costs/:id', async (request, reply) => {
+  // DELETE /api/v1/organizations/:orgId/costs/:id — delete cost
+  app.delete('/api/v1/organizations/:orgId/costs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await deleteCost(id, request.userId);
     return reply.send({ success: true, data: result });

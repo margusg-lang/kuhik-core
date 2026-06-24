@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Building2, Plus, Home } from "lucide-react";
+import { Icon } from "@/components/haldur/Icons";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
 
 export default function UhistudPage() {
   const [orgs, setOrgs] = useState<any[]>([]);
@@ -26,13 +27,18 @@ export default function UhistudPage() {
 
   return (
     <div className="p-8">
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Korteriühistud" },
+      ]} />
+
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Korteriühistud</h1>
           <p className="mt-1 text-slate-600">Halda kõiki oma ühistuid</p>
         </div>
         <Link href="/haldur/uhistud/uus" className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-          <Plus className="h-4 w-4" /> Lisa ühistu
+          <Icon name="Plus" /> Lisa ühistu
         </Link>
       </div>
 
@@ -41,7 +47,9 @@ export default function UhistudPage() {
 
       {!loading && !error && orgs.length === 0 && (
         <div className="rounded-xl border border-slate-200 bg-white p-12 text-center">
-          <Building2 className="mx-auto h-12 w-12 text-slate-300" />
+          <div className="mx-auto h-12 w-12 text-slate-300 flex items-center justify-center">
+            <Icon name="Building2" />
+          </div>
           <p className="mt-4 text-slate-600">Ühistuid pole veel lisatud.</p>
           <Link href="/haldur/uhistud/uus" className="mt-4 inline-flex items-center gap-2 text-brand-600 hover:underline text-sm">
             Lisa esimene ühistu

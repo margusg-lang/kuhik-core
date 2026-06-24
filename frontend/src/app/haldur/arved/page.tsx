@@ -1,13 +1,17 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { Icon } from "@/components/haldur/Icons";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
+import ContextHeader from "@/components/haldur/ContextHeader";
+import { getToken } from "@/lib/auth";
 
 const typeNames: Record<string, string> = { electricity: "Elekter", water: "Vesi", heating: "Küte", gas: "Gaas", other: "Muu" };
 
 export default function InvoicesPage() {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
+  const [selectedOrgName, setSelectedOrgName] = useState("");
   const [invoices, setInvoices] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
   const [selectedRunId, setSelectedRunId] = useState("");
@@ -16,15 +20,23 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     fetch("/api/v1/organizations", { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(data => { if (data.success) { setOrgs(data.data); if (data.data.length > 0) setSelectedOrgId(data.data[0].id); } });
+      .then(r => r.json()).then(data => {
+        if (data.success) {
+          setOrgs(data.data);
+          if (data.data.length > 0) {
+            setSelectedOrgId(data.data[0].id);
+            setSelectedOrgName(data.data[0].name);
+          }
+        }
+      });
   }, []);
 
   useEffect(() => {
     if (!selectedOrgId) return;
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     setLoading(true);
     Promise.all([
@@ -39,7 +51,7 @@ export default function InvoicesPage() {
   async function handleGenerate() {
     if (!selectedRunId) return;
     setGenerating(true);
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     try {
       const res = await fetch(`/api/v1/invoices/generate/${selectedRunId}`, {
@@ -55,7 +67,7 @@ export default function InvoicesPage() {
   }
 
   async function viewDetail(id: string) {
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     const res = await fetch(`/api/v1/invoices/${id}`, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
@@ -64,7 +76,7 @@ export default function InvoicesPage() {
 
   async function addPayment(amount: string) {
     if (!amount || !detail) return;
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     try {
       const res = await fetch(`/api/v1/invoices/${detail.id}/payments`, {
@@ -79,18 +91,30 @@ export default function InvoicesPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Arved</h1>
-        <p className="text-sm text-slate-600 mt-1">Korterite arved ja nende detailid</p>
-      </div>
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Finants", href: "/haldur" },
+        { label: "Arved" },
+      ]} />
+
+      <ContextHeader
+        entityName={selectedOrgName ? `${selectedOrgName} — Arved` : "Arved"}
+        entityType="Finants"
+        actions={[
+          { label: "Lisa makse", href: "/haldur/maksed", icon: "Euro" },
+        ]}
+      />
 
       <div className="mb-6">
-        <select value={selectedOrgId} onChange={e => setSelectedOrgId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        <select value={selectedOrgId} onChange={e => {
+          setSelectedOrgId(e.target.value);
+          const org = orgs.find(o => o.id === e.target.value);
+          if (org) setSelectedOrgName(org.name);
+        }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">
           {orgs.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </div>
 
-      {/* Generate from allocation */}
       {runs.length > 0 && (
         <div className="mb-8 flex items-end gap-3 p-4 bg-brand-50 rounded-xl border border-brand-200">
           <div>
@@ -110,7 +134,6 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* Detail view */}
       {detail && (
         <div className="mb-8 rounded-xl border border-slate-200 bg-white p-6">
           <div className="flex justify-between items-start mb-4">
@@ -118,6 +141,10 @@ export default function InvoicesPage() {
               <h2 className="text-lg font-semibold text-slate-900">Arve {detail.invoiceNumber}</h2>
               <p className="text-sm text-slate-500">
                 {detail.apartment?.unitLabel || "—"} — {detail.apartment?.building?.name || ""}
+                {detail.apartment && (
+                  <Link href={`/haldur/uhistud/${selectedOrgId}/hooned/${detail.apartment.buildingId || ""}/korter/${detail.apartment.id}`}
+                    className="ml-2 text-brand-600 hover:underline text-xs">Vaata korter ➡</Link>
+                )}
               </p>
               <p className="text-xs text-slate-400">
                 {new Date(detail.periodStart).toLocaleDateString("et-EE")} – {new Date(detail.periodEnd).toLocaleDateString("et-EE")}
@@ -142,18 +169,34 @@ export default function InvoicesPage() {
               </tr>
             </tfoot>
           </table>
-          <button onClick={() => setDetail(null)} className="mt-4 text-sm text-slate-500 hover:text-slate-700">Sulge</button>
+
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+            <div className="flex gap-2 items-center text-sm text-slate-500 mr-2">Jätka:</div>
+            <div className="flex gap-2">
+              <input type="number" step="0.01" placeholder="Summa €" className="w-28 px-3 py-1.5 border border-slate-300 rounded-lg text-sm"
+                id="payment-amount" />
+              <button onClick={() => {
+                const input = document.getElementById("payment-amount") as HTMLInputElement;
+                if (input?.value) addPayment(input.value);
+              }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700">
+                <Icon name="Euro" /> Lisa makse
+              </button>
+            </div>
+            <Link href={`/haldur/maksed`} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50">
+              Kõik maksed ➡
+            </Link>
+          </div>
+          <button onClick={() => setDetail(null)} className="mt-2 text-sm text-slate-500 hover:text-slate-700">Sulge</button>
         </div>
       )}
 
-      {/* Invoices list */}
       {loading && <div className="text-slate-600">Laen...</div>}
 
       {!loading && invoices.length === 0 && (
         <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-600">
-          <FileText className="mx-auto h-12 w-12 text-slate-300" />
+          <div className="mx-auto h-12 w-12 text-slate-300 flex items-center justify-center"><Icon name="FileText" /></div>
           <p className="mt-4">Arveid pole veel genereeritud.</p>
-          <p className="text-xs mt-2">Käivita esmalt jaotus (Wave 5) ja vajuta "Genereeri".</p>
+          <p className="text-xs mt-2">Käivita esmalt jaotus ja vajuta "Genereeri".</p>
         </div>
       )}
 

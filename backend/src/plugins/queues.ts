@@ -2,27 +2,37 @@
 // BullMQ queue plugin for background job processing
 
 import { FastifyInstance } from 'fastify';
-import { Queue } from 'bullmq';
+import { Queue, ConnectionOptions } from 'bullmq';
 import { config } from '../config.js';
 
 let billingQueue: Queue | null = null;
 let notificationQueue: Queue | null = null;
 
+function createQueueIfRedisAvailable(name: string): Queue | null {
+  if (!config.redisUrl) return null;
+  try {
+    const connection: ConnectionOptions = { url: config.redisUrl };
+    return new Queue(name, { connection });
+  } catch {
+    return null;
+  }
+}
+
 export async function registerQueuePlugin(app: FastifyInstance): Promise<void> {
   // Queues are optional — they only register if Redis is available
-  try {
-    billingQueue = new Queue('billing', { connection: { url: config.redisUrl } });
-    notificationQueue = new Queue('notifications', { connection: { url: config.redisUrl } });
+  billingQueue = createQueueIfRedisAvailable('billing');
+  notificationQueue = createQueueIfRedisAvailable('notifications');
 
-    app.decorate('queues', {
-      billing: billingQueue,
-      notifications: notificationQueue,
-    });
+  app.decorate('queues', {
+    billing: billingQueue,
+    notifications: notificationQueue,
+  });
 
+  if (billingQueue) {
     app.log.info('BullMQ queues registered (Redis connected)');
-  } catch (err) {
-    app.log.warn('Redis not available — queues disabled. Background jobs will not run.');
-    app.log.warn('To enable queues, start Redis and set REDIS_URL in .env');
+  } else {
+    app.log.warn('Redis not configured — queues disabled. Background jobs will not run.');
+    app.log.warn('To enable queues, set REDIS_URL in .env and start Redis');
   }
 }
 

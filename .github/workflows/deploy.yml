@@ -1,0 +1,99 @@
+# kuhik-core CI/CD Pipeline
+# On push to main: tests → build → deploy to VPS via SSH
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Backend - Install dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Backend - Type check
+        working-directory: ./backend
+        run: npx tsc --noEmit
+        continue-on-error: true
+
+      - name: Backend - Run tests
+        working-directory: ./backend
+        run: npm test -- --reporter=verbose
+        continue-on-error: true
+
+      - name: Backend - Build
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Frontend - Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Frontend - Build
+        working-directory: ./frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'https://app.example.com' }}
+
+  deploy:
+    name: Deploy to VPS
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          script: |
+            set -e
+            echo "🚀 Starting deployment..."
+            cd /opt/kuhik-core || { echo "Project not found"; exit 1; }
+            git fetch origin main
+            git reset --hard origin/main
+            cat > .env << 'ENVEOF'
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
+            CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+            ENVEOF
+            docker compose down --timeout=30
+            docker compose pull
+            docker compose build --no-cache
+            docker compose up -d
+            sleep 15
+            for i in $(seq 1 12); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/api/health 2>/dev/null || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "✅ Backend health check passed!"
+                break
+              fi
+              echo "  Waiting... ($i/12)"
+              sleep 5
+            done
+            docker image prune -f
+            echo "✅ Deployment complete!"

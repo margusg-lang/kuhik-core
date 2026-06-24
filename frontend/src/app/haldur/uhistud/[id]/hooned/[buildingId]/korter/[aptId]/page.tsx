@@ -1,24 +1,34 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { UserPlus, Trash2 } from "lucide-react";
+import { Icon } from "@/components/haldur/Icons";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
+import ContextHeader from "@/components/haldur/ContextHeader";
 
-export default function ApartmentPeoplePage({ params }: { params: Promise<{ id: string; buildingId: string; aptId: string }> }) {
+export default function ApartmentPeoplePage({ params }: { params: { id: string; buildingId: string; aptId: string } }) {
   const [orgId, setOrgId] = useState("");
+  const [buildingId, setBuildingId] = useState("");
   const [aptId, setAptId] = useState("");
+  const [aptLabel, setAptLabel] = useState("");
+  const [buildingName, setBuildingName] = useState("");
+  const [orgName, setOrgName] = useState("");
   const [people, setPeople] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [orgPeople, setOrgPeople] = useState<any[]>([]);
 
-  // Form state
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [relationshipType, setRelationshipType] = useState("RESIDENT");
   const [isPrimary, setIsPrimary] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    params.then(p => { setOrgId(p.id); setAptId(p.aptId); });
+    if (params && typeof params === "object") {
+      const p = params as { id: string; buildingId: string; aptId: string };
+      setOrgId(p.id || "");
+      setBuildingId(p.buildingId || "");
+      setAptId(p.aptId || "");
+    }
   }, [params]);
 
   useEffect(() => {
@@ -27,16 +37,22 @@ export default function ApartmentPeoplePage({ params }: { params: Promise<{ id: 
     if (!token) return;
 
     Promise.all([
+      fetch(`/api/v1/apartments/${aptId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`/api/v1/buildings/${buildingId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`/api/v1/organizations/${orgId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch(`/api/v1/apartments/${aptId}/people`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch(`/api/v1/organizations/${orgId}/people`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
     ])
-      .then(([relData, peopleData]) => {
+      .then(([aptData, bldData, orgData, relData, peopleData]) => {
+        if (aptData.success) setAptLabel(aptData.data.unitLabel);
+        if (bldData.success) setBuildingName(bldData.data.name);
+        if (orgData.success) setOrgName(orgData.data.name);
         if (relData.success) setPeople(relData.data);
         if (peopleData.success) setOrgPeople(peopleData.data);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [aptId, orgId]);
+  }, [aptId, orgId, buildingId]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -74,14 +90,37 @@ export default function ApartmentPeoplePage({ params }: { params: Promise<{ id: 
     } catch {}
   }
 
+  if (loading) return <div className="p-8 text-slate-600">Laen...</div>;
+
   return (
     <div className="p-8">
-      <Link href={`/haldur/uhistud/${orgId}/hooned/${aptId.split('').join('')}`} className="text-sm text-brand-600 hover:underline">← Tagasi</Link>
-      <div className="mt-4 mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Korteri inimesed</h1>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">
-          <UserPlus className="h-4 w-4" /> {showForm ? "Sulge" : "Lisa isik"}
-        </button>
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Korteriühistud", href: "/haldur/uhistud" },
+        { label: orgName || "Ühistu", href: `/haldur/uhistud/${orgId}` },
+        { label: buildingName || "Hoone", href: `/haldur/uhistud/${orgId}/hooned/${buildingId}` },
+        { label: aptLabel ? `Korter ${aptLabel}` : "Korter" },
+      ]} />
+
+      <ContextHeader
+        entityName={aptLabel ? `Korter ${aptLabel}` : "Korter"}
+        entityType="Korter"
+        parentContext={buildingName ? `${buildingName} / ${orgName || ""}` : undefined}
+        actions={[
+          { label: "Lisa näit", href: `/haldur/uhistud/${orgId}/hooned/${buildingId}/korter/${aptId}/arvestid`, variant: "primary" as const, icon: "Gauge" },
+          { label: "Vaata arveid", href: `/haldur/arved`, icon: "FileText" },
+        ]}
+      />
+
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+          Seotud inimesed ({people.length})
+        </h2>
+        <div className="flex gap-2">
+          <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">
+            <Icon name="Plus" /> {showForm ? "Sulge" : "Lisa isik"}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -117,9 +156,7 @@ export default function ApartmentPeoplePage({ params }: { params: Promise<{ id: 
         </form>
       )}
 
-      {loading && <div className="text-slate-600">Laen...</div>}
-
-      {!loading && people.length === 0 && (
+      {!loading && people.length === 0 && !showForm && (
         <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-600">Selle korteriga pole isikuid seotud.</div>
       )}
 
@@ -149,7 +186,7 @@ export default function ApartmentPeoplePage({ params }: { params: Promise<{ id: 
                   <td className="px-4 py-3">{r.isPrimary ? "✅" : "—"}</td>
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => handleRemove(r.id)} className="text-red-500 hover:text-red-700">
-                      <Trash2 className="h-4 w-4" />
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                     </button>
                   </td>
                 </tr>

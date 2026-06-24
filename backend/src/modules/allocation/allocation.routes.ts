@@ -22,8 +22,8 @@ export async function registerAllocationRoutes(app: FastifyInstance): Promise<vo
     return reply.send({ success: true, data: runs });
   });
 
-  // GET /api/v1/allocation/runs/:id — get run with items
-  app.get('/api/v1/allocation/runs/:id', async (request, reply) => {
+  // GET /api/v1/organizations/:orgId/allocation/runs/:id — get run with items
+  app.get('/api/v1/organizations/:orgId/allocation/runs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const run = await getAllocationRun(id, request.userId);
     return reply.send({ success: true, data: run });

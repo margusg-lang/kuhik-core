@@ -16,6 +16,12 @@
     "db:push": "cd backend && npx prisma db push",
     "db:studio": "cd backend && npx prisma studio",
     "db:seed": "cd backend && npm run db:seed",
+    "db:reset": "cd backend && npm run db:reset",
+    "db:seed:full": "cd backend && npm run db:seed:full",
+    "db:seed:winter": "cd backend && npm run db:seed:winter",
+    "db:seed:tenant-change": "cd backend && npm run db:seed:tenant-change",
+    "db:seed:late-payments": "cd backend && npm run db:seed:late-payments",
+    "db:seed:high-consumption": "cd backend && npm run db:seed:high-consumption",
     "test": "cd backend && npm test",
     "typecheck": "cd backend && npx tsc --noEmit"
   },

@@ -7,6 +7,11 @@ export async function registerInvoiceRoutes(app: FastifyInstance): Promise<void>
   app.addHook('preHandler', app.authenticate);
 
   // POST /api/v1/invoices/generate/:allocationRunId — generate invoices from allocation
+  //
+  // NOTE: This endpoint does NOT require a request body. The allocationRunId comes from URL params.
+  // Fastify's default JSON body parser crashes on empty body + Content-Type: application/json.
+  // We use a custom content type parser that tolerates empty body to prevent 500 errors.
+  //
   app.post('/api/v1/invoices/generate/:allocationRunId', async (request, reply) => {
     const { allocationRunId } = request.params as { allocationRunId: string };
     const invoices = await generateInvoices(allocationRunId, request.userId);

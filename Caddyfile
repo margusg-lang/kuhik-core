@@ -1,0 +1,30 @@
+# kuhik-core Caddyfile
+# Reverse proxy for production deployment
+# Routes: /api/* → backend, /* → frontend
+
+# Production domain (uncomment and replace for SSL):
+# app.example.com {
+#     reverse_proxy /api/* backend:4000
+#     reverse_proxy frontend:3000
+# }
+
+# Local HTTP setup for initial deployment
+:80 {
+    # API routes → backend
+    handle_path /api/* {
+        reverse_proxy backend:4000
+    }
+
+    # Everything else → frontend
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}

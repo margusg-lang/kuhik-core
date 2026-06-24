@@ -1,18 +1,20 @@
 "use client";
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Plus, Trash2 } from "lucide-react";
+import { Icon } from "@/components/haldur/Icons";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
+import ContextHeader from "@/components/haldur/ContextHeader";
+import { getToken, getCurrentUser } from "@/lib/auth";
 
 const typeNames: Record<string, string> = { electricity: "Elekter", water: "Vesi", heating: "Küte", gas: "Gaas", other: "Muu" };
 
 export default function CostsPage() {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState("");
+  const [selectedOrgName, setSelectedOrgName] = useState("");
   const [costs, setCosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
-  // Form state
   const [type, setType] = useState("electricity");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
@@ -22,16 +24,24 @@ export default function CostsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     fetch("/api/v1/organizations", { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(data => { if (data.success) { setOrgs(data.data); if (data.data.length > 0) setSelectedOrgId(data.data[0].id); } })
+      .then(r => r.json()).then(data => {
+        if (data.success) {
+          setOrgs(data.data);
+          if (data.data.length > 0) {
+            setSelectedOrgId(data.data[0].id);
+            setSelectedOrgName(data.data[0].name);
+          }
+        }
+      })
       .catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
     if (!selectedOrgId) return;
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     fetch(`/api/v1/organizations/${selectedOrgId}/costs`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(data => { if (data.success) setCosts(data.data); })
@@ -41,7 +51,7 @@ export default function CostsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     try {
       const res = await fetch(`/api/v1/organizations/${selectedOrgId}/costs`, {
@@ -56,10 +66,10 @@ export default function CostsPage() {
   }
 
   async function handleDelete(id: string) {
-    const token = localStorage.getItem("kuhik_token");
+    const token = getToken();
     if (!token) return;
     try {
-      const res = await fetch(`/api/v1/utility-costs/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`/api/v1/organizations/${selectedOrgId}/costs/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (data.success) setCosts(prev => prev.filter((c: any) => c.id !== id));
     } catch {}
@@ -67,19 +77,27 @@ export default function CostsPage() {
 
   return (
     <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Kulud</h1>
-          <p className="text-sm text-slate-600 mt-1">Organisatsiooni kommunaalkulude arvestus</p>
-        </div>
-        <button onClick={() => setShowForm(!showForm)} className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">
-          <Plus className="h-4 w-4" /> {showForm ? "Sulge" : "Lisa kulu"}
-        </button>
-      </div>
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Finants", href: "/haldur" },
+        { label: "Kulud" },
+      ]} />
 
-      {/* Org selector */}
+      <ContextHeader
+        entityName={selectedOrgName ? `${selectedOrgName} — Kulud` : "Kulud"}
+        entityType="Finants"
+        actions={[
+          { label: showForm ? "Sulge" : "Lisa kulu", variant: "primary" as const, onClick: () => setShowForm(!showForm) },
+          { label: "Käivita jaotus", href: "/haldur/jaotused", icon: "Scale" },
+        ]}
+      />
+
       <div className="mb-6">
-        <select value={selectedOrgId} onChange={e => setSelectedOrgId(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+        <select value={selectedOrgId} onChange={e => {
+          setSelectedOrgId(e.target.value);
+          const org = orgs.find(o => o.id === e.target.value);
+          if (org) setSelectedOrgName(org.name);
+        }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm">
           {orgs.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </div>
@@ -144,7 +162,9 @@ export default function CostsPage() {
                   <td className="px-4 py-3 text-right font-medium text-slate-900">{c.totalAmount.toFixed(2)} €</td>
                   <td className="px-4 py-3 text-slate-600">{c.supplierName || "—"}</td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => handleDelete(c.id)} className="text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => handleDelete(c.id)} className="text-red-500 hover:text-red-700">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    </button>
                   </td>
                 </tr>
               ))}

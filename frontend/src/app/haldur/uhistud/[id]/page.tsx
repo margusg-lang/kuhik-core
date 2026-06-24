@@ -1,17 +1,23 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Building2, Home, Plus, Users } from "lucide-react";
+import { Icon } from "@/components/haldur/Icons";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
+import ContextHeader from "@/components/haldur/ContextHeader";
 
-export default function OrgDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function OrgDetailPage({ params }: { params: { id: string } }) {
   const [orgId, setOrgId] = useState("");
+
+  useEffect(() => {
+    // params is a plain object in Next.js 14 client components
+    if (params && typeof params === "object") {
+      setOrgId((params as { id: string }).id || "");
+    }
+  }, [params]);
+
   const [org, setOrg] = useState<any>(null);
   const [buildings, setBuildings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    params.then(p => setOrgId(p.id));
-  }, [params]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -35,50 +41,28 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
 
   return (
     <div className="p-8">
-      <Link href="/haldur/uhistud" className="text-sm text-brand-600 hover:underline">← Tagasi ühistute juurde</Link>
-      <div className="mt-2 mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">{org.name}</h1>
-        <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600">
-          {org.registryCode && <span>Reg: {org.registryCode}</span>}
-          {org.address && <span>{org.address}</span>}
-          {org.contactEmail && <span>{org.contactEmail}</span>}
-        </div>
-      </div>
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Korteriühistud", href: "/haldur/uhistud" },
+        { label: org.name },
+      ]} />
 
-      {/* Wave 1 module cards */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href={`/haldur/uhistud/${orgId}`} className="rounded-xl border border-brand-200 bg-brand-50 p-5 hover:shadow-md transition-all">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-brand-100 text-brand-600"><Home className="h-5 w-5" /></div>
-          <h3 className="font-semibold text-slate-900">Hooned ja korterid</h3>
-          <p className="mt-1 text-xs text-slate-500">{buildings.length} hoonet</p>
-        </Link>
-        <Link href={`/haldur/uhistud/${orgId}/inimesed`} className="rounded-xl border border-green-200 bg-green-50 p-5 hover:shadow-md transition-all">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-600"><Users className="h-5 w-5" /></div>
-          <h3 className="font-semibold text-slate-900">Elanikud ja kontaktid</h3>
-          <p className="mt-1 text-xs text-slate-500">Isikud ja korterite seosed</p>
-        </Link>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 opacity-50">
-          <h3 className="font-semibold text-slate-400">Näidud</h3>
-          <p className="mt-1 text-xs text-slate-400">📋 Wave 2+</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 opacity-50">
-          <h3 className="font-semibold text-slate-400">Arveldus</h3>
-          <p className="mt-1 text-xs text-slate-400">📋 Wave 3+</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 opacity-50">
-          <h3 className="font-semibold text-slate-400">Arved</h3>
-          <p className="mt-1 text-xs text-slate-400">📋 Wave 4+</p>
-        </div>
-      </div>
+      <ContextHeader
+        entityName={org.name}
+        entityType="Ühistu"
+        actions={[
+          { label: "Ava hooned", href: `#hooned`, variant: "primary" as const, icon: "Building2" },
+        ]}
+      />
 
       {/* Buildings */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-            <Building2 className="h-5 w-5" />Hooned ({buildings.length})
+            <Icon name="Building2" /> Hooned ({buildings.length})
           </h2>
           <Link href={`/haldur/uhistud/${orgId}/hooned/new`} className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline">
-            <Plus className="h-4 w-4" /> Lisa hoone
+            <Icon name="Plus" /> Lisa hoone
           </Link>
         </div>
 
@@ -88,7 +72,7 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {buildings.map((b: any) => (
               <Link key={b.id} href={`/haldur/uhistud/${orgId}/hooned/${b.id}`} className="rounded-xl border border-slate-200 bg-white p-5 hover:shadow-md transition-all hover:-translate-y-0.5">
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><Building2 className="h-5 w-5" /></div>
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><Icon name="Building2" /></div>
                 <h3 className="font-semibold text-slate-900">{b.name}</h3>
                 {b.address && <p className="mt-1 text-xs text-slate-500">{b.address}</p>}
               </Link>

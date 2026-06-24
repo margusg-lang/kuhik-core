@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
 
-export default function NewBuildingPage({ params }: { params: Promise<{ id: string }> }) {
+export default function NewBuildingPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [orgId, setOrgId] = useState("");
   const [name, setName] = useState("");
@@ -11,7 +11,11 @@ export default function NewBuildingPage({ params }: { params: Promise<{ id: stri
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useState(() => { params.then(p => setOrgId(p.id)); });
+  useState(() => {
+    if (params && typeof params === "object") {
+      setOrgId((params as { id: string }).id || "");
+    }
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,7 +42,12 @@ export default function NewBuildingPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="p-8 max-w-xl">
-      <Link href={`/haldur/uhistud/${orgId}`} className="text-sm text-brand-600 hover:underline">← Tagasi</Link>
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Korteriühistud", href: "/haldur/uhistud" },
+        { label: "Ühistu", href: `/haldur/uhistud/${orgId}` },
+        { label: "Lisa hoone" },
+      ]} />
       <h1 className="text-2xl font-bold text-slate-900 mt-4">Lisa hoone</h1>
       <form onSubmit={handleSubmit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6">
         <div>

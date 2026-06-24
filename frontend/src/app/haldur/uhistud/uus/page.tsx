@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
 
 export default function NewOrgPage() {
   const router = useRouter();
@@ -42,7 +43,11 @@ export default function NewOrgPage() {
 
   return (
     <div className="p-8 max-w-xl">
-      <Link href="/haldur/uhistud" className="text-sm text-brand-600 hover:underline">← Tagasi</Link>
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Korteriühistud", href: "/haldur/uhistud" },
+        { label: "Lisa ühistu" },
+      ]} />
       <h1 className="text-2xl font-bold text-slate-900 mt-4">Lisa korteriühistu</h1>
       <p className="mt-1 mb-8 text-slate-600">Sisesta ühistu põhiandmed</p>
       <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-6">

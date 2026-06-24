@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { decodeToken, getRedirectPath } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,10 +30,16 @@ export default function LoginPage() {
         return;
       }
 
-      // Store token (simplified — use cookies in production)
+      // Store token
       localStorage.setItem("kuhik_token", data.token);
-      localStorage.setItem("kuhik_user", JSON.stringify(data.user));
-      router.push("/haldur");
+      if (data.user) {
+        localStorage.setItem("kuhik_user", JSON.stringify(data.user));
+      }
+
+      // Role-based redirect (eesti.ee style: role determines destination)
+      const user = decodeToken(data.token);
+      const role = user?.role || "haldur";
+      router.push(getRedirectPath(role));
     } catch {
       setError("Sisselogimine ebaõnnestus. Kontrolli ühendust.");
       setLoading(false);
@@ -61,7 +67,7 @@ export default function LoginPage() {
             {loading ? "Sisselogimine..." : "Logi sisse"}
           </button>
           <p className="text-center text-sm text-slate-600">
-            Pole kontot? <Link href="/register" className="text-brand-600 hover:text-brand-700 font-medium">Registreeru</Link>
+            Pole kontot? <a href="/register" className="text-brand-600 hover:text-brand-700 font-medium">Registreeru</a>
           </p>
         </form>
       </div>

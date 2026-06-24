@@ -12,8 +12,17 @@ declare module 'fastify' {
     authorize: (roles: string[]) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     generateTokens: (payload: AuthTokenPayload) => { accessToken: string; refreshToken: string };
   }
+}
+
+// Override @fastify/jwt's user type declaration
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    user: AuthTokenPayload;
+  }
+}
+
+declare module 'fastify' {
   interface FastifyRequest {
-    user: AuthTokenPayload | null;
     userId: string;
     userRole: string;
     associationId: string | null;
@@ -61,14 +70,14 @@ export async function registerAuthPlugin(app: FastifyInstance): Promise<void> {
     const accessToken = app.jwt.sign(payload, { expiresIn: config.jwtExpiresIn });
     const refreshToken = app.jwt.sign(
       { id: payload.id, type: 'refresh' },
-      { secret: config.jwtRefreshSecret, expiresIn: config.jwtRefreshExpiresIn },
+      { expiresIn: config.jwtRefreshExpiresIn },
     );
     return { accessToken, refreshToken };
   });
 
   // HOOK: preHandler — set user from token if present
   app.addHook('preHandler', async (request: FastifyRequest) => {
-    request.user = null;
+    request.user = null as unknown as AuthTokenPayload;
     request.userId = '';
     request.userRole = '';
     request.associationId = null;

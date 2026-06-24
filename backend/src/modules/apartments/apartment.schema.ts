@@ -3,7 +3,7 @@
 import { z } from 'zod';
 
 export const createApartmentSchema = z.object({
-  unitLabel: z.string().min(1, 'Korteri number on kohustuslik').max(20),
+  unitLabel: z.string().min(1, 'Korteri number on kohustuslik').max(100),
   floor: z.number().int().optional().nullable(),
   areaSqm: z.number().positive().optional().nullable(),
   heatedAreaSqm: z.number().positive().optional().nullable(),
@@ -11,7 +11,7 @@ export const createApartmentSchema = z.object({
 });
 
 export const updateApartmentSchema = z.object({
-  unitLabel: z.string().min(1).max(20).optional(),
+  unitLabel: z.string().min(1).max(100).optional(),
   floor: z.number().int().optional().nullable(),
   areaSqm: z.number().positive().optional().nullable(),
   heatedAreaSqm: z.number().positive().optional().nullable(),

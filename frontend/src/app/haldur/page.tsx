@@ -1,39 +1,98 @@
-// WAVE 1: Haldur (Manager) Dashboard with navigation
+"use client";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
+import { Icon } from "@/components/haldur/Icons";
+import { getToken } from "@/lib/auth";
 
-export default function HaldurPage() {
+interface QuickStat {
+  label: string;
+  value: string;
+  icon: string;
+  color: string;
+}
+
+export default function HaldurDashboardPage() {
+  const [orgCount, setOrgCount] = useState(0);
+  const [invoiceCount, setInvoiceCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    Promise.all([
+      fetch("/api/v1/organizations", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+    ])
+      .then(([orgData]) => {
+        if (orgData.success) setOrgCount(orgData.data.length);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white text-sm font-bold">KH</div>
-            <span className="font-bold text-slate-800">Kuhik — Haldur</span>
-          </div>
-          <Link href="/login" className="text-sm text-slate-600 hover:text-slate-900">Logi välja</Link>
-        </div>
-      </header>
+    <div className="p-8">
+      <Breadcrumb segments={[
+        { label: "Haldur" },
+      ]} />
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
+      <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Tere tulemast, haldur!</h1>
-        <p className="text-slate-600 mb-8">Kuhik halduskeskkond</p>
+        <p className="text-slate-600">Kuhik halduskeskkond — vali ühistu alustamiseks</p>
+      </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Link href="/haldur/uhistud" className="bg-white rounded-xl border border-brand-200 p-6 hover:shadow-md transition-shadow hover:-translate-y-0.5">
-            <h3 className="font-semibold text-brand-700">Korteriühistud</h3>
-            <p className="text-sm text-slate-600 mt-1">KÜ-de haldus, lisamine ja seadistamine</p>
-            <div className="text-xs text-brand-500 mt-3">➡ Ava</div>
-          </Link>
-          <div className="bg-white rounded-xl border border-slate-200 p-6 opacity-50">
-            <h3 className="font-semibold text-slate-400">Näidud</h3>
-            <p className="text-sm text-slate-400 mt-1">📋 Wave 2+</p>
+      {/* Primary Action — giant card like eesti.ee "Sisene iseteenindusse" */}
+      <Link
+        href="/haldur/uhistud"
+        className="block bg-white rounded-xl border-2 border-brand-200 p-8 hover:shadow-lg transition-all hover:-translate-y-0.5 mb-8 max-w-lg"
+      >
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
+            <Icon name="Building2" />
           </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-6 opacity-50">
-            <h3 className="font-semibold text-slate-400">Arved</h3>
-            <p className="text-sm text-slate-400 mt-1">📋 Wave 4+</p>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">Korteriühistud</h2>
+            <p className="text-sm text-slate-500">{orgCount} ühistut</p>
           </div>
         </div>
-      </main>
+        <p className="text-sm text-slate-600 mb-4">
+          KÜ-de haldus, hoonete ja korterite haldamine, kulude jaotamine, arvete genereerimine
+        </p>
+        <div className="inline-flex items-center gap-2 bg-brand-600 text-white px-5 py-2 rounded-lg text-sm font-semibold">
+          Ava ühistu ➡
+        </div>
+      </Link>
+
+      {/* Quick domain links — like eesti.ee quick-action cards */}
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Finants</h2>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/haldur/kulud"
+            className="bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 hover:border-brand-200 hover:text-brand-700 transition-colors flex items-center gap-2"
+          >
+            <Icon name="Coins" /> Kulud
+          </Link>
+          <Link
+            href="/haldur/jaotused"
+            className="bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 hover:border-brand-200 hover:text-brand-700 transition-colors flex items-center gap-2"
+          >
+            <Icon name="Scale" /> Jaotused
+          </Link>
+          <Link
+            href="/haldur/arved"
+            className="bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 hover:border-brand-200 hover:text-brand-700 transition-colors flex items-center gap-2"
+          >
+            <Icon name="FileText" /> Arved
+          </Link>
+          <Link
+            href="/haldur/maksed"
+            className="bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 hover:border-brand-200 hover:text-brand-700 transition-colors flex items-center gap-2"
+          >
+            <Icon name="Euro" /> Maksed
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

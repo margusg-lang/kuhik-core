@@ -1,55 +1,81 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Icon } from "@/components/haldur/Icons";
+import Breadcrumb from "@/components/haldur/Breadcrumb";
+import ContextHeader from "@/components/haldur/ContextHeader";
 
-export default function BuildingDetailPage({ params }: { params: Promise<{ id: string; buildingId: string }> }) {
+export default function BuildingDetailPage({ params }: { params: { id: string; buildingId: string } }) {
+  const router = useRouter();
   const [orgId, setOrgId] = useState("");
   const [buildingId, setBuildingId] = useState("");
   const [building, setBuilding] = useState<any>(null);
+  const [orgName, setOrgName] = useState("");
   const [apartments, setApartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    params.then(p => { setOrgId(p.id); setBuildingId(p.buildingId); });
+    if (params && typeof params === "object") {
+      const p = params as { id: string; buildingId: string };
+      setOrgId(p.id || "");
+      setBuildingId(p.buildingId || "");
+    }
   }, [params]);
 
   useEffect(() => {
-    if (!buildingId) return;
+    if (!buildingId || !orgId) return;
     const token = localStorage.getItem("kuhik_token");
     if (!token) return;
 
     Promise.all([
       fetch(`/api/v1/buildings/${buildingId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch(`/api/v1/buildings/${buildingId}/apartments`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`/api/v1/organizations/${orgId}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
     ])
-      .then(([bldData, aptData]) => {
+      .then(([bldData, aptData, orgData]) => {
         if (bldData.success) setBuilding(bldData.data);
         if (aptData.success) setApartments(aptData.data);
+        if (orgData.success) setOrgName(orgData.data.name);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [buildingId]);
+  }, [buildingId, orgId]);
 
   if (loading) return <div className="p-8 text-slate-600">Laen...</div>;
   if (!building) return <div className="p-8 text-slate-600">Hoonet ei leitud.</div>;
 
   return (
     <div className="p-8">
-      <Link href={`/haldur/uhistud/${orgId}`} className="text-sm text-brand-600 hover:underline">← Tagasi ühistu juurde</Link>
-      <div className="mt-2 mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">{building.name}</h1>
-        {building.address && <p className="text-slate-600 text-sm mt-1">{building.address}</p>}
-      </div>
+      <Breadcrumb segments={[
+        { label: "Haldur", href: "/haldur" },
+        { label: "Korteriühistud", href: "/haldur/uhistud" },
+        { label: orgName || "Ühistu", href: `/haldur/uhistud/${orgId}` },
+        { label: building.name },
+      ]} />
+
+      <ContextHeader
+        entityName={building.name}
+        entityType="Hoone"
+        parentContext={orgName ? `${orgName}` : undefined}
+        actions={[
+          { label: "Ava korterid", href: `#apartments`, variant: "primary" as const, icon: "Home" },
+        ]}
+      />
 
       {/* Apartments */}
-      <section>
+      <section id="apartments">
         <div className="flex items-center justify-between mb-4">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
             Korterid ({apartments.length})
           </h2>
           <div className="flex gap-2">
-            <Link href={`/haldur/uhistud/${orgId}/hooned/${buildingId}/muuda`} className="text-sm text-brand-600 hover:underline">Muuda hoonet</Link>
+            <details className="relative">
+              <summary className="text-sm text-slate-500 hover:text-slate-700 cursor-pointer list-none">Veel ▾</summary>
+              <div className="absolute right-0 top-6 z-10 bg-white border border-slate-200 rounded-lg shadow-lg p-1 min-w-[140px]">
+                <Link href={`/haldur/uhistud/${orgId}/hooned/${buildingId}/muuda`} className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-md">Muuda hoonet</Link>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -70,7 +96,8 @@ export default function BuildingDetailPage({ params }: { params: Promise<{ id: s
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {apartments.map((apt: any) => (
-                  <tr key={apt.id} className="hover:bg-slate-50">
+                  <tr key={apt.id} className="hover:bg-slate-50 cursor-pointer"
+                    onClick={() => router.push(`/haldur/uhistud/${orgId}/hooned/${buildingId}/korter/${apt.id}`)}>
                     <td className="px-4 py-3 font-medium text-slate-900">{apt.unitLabel}</td>
                     <td className="px-4 py-3 text-slate-600">{apt.floor ?? "—"}</td>
                     <td className="px-4 py-3 text-slate-600">{apt.areaSqm ?? "—"}</td>

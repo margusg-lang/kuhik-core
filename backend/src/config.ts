@@ -1,18 +1,24 @@
 // kuhik-core/backend/src/config.ts
-// Central configuration — all settings from env vars
+// Deprecated — use src/lib/env.ts instead
+// Kept as re-export for backward compatibility during migration
+// Will be removed in next major version
+
+import { env } from './lib/env.js';
 
 export const config = {
-  port: parseInt(process.env.PORT || '4000', 10),
-  host: process.env.HOST || '0.0.0.0',
-  jwtSecret: process.env.JWT_SECRET || 'kuhik-jwt-secret-change-in-production',
-  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'kuhik-refresh-secret',
+  port: env.PORT,
+  host: env.HOST,
+  jwtSecret: env.JWT_SECRET,
+  jwtRefreshSecret: env.JWT_REFRESH_SECRET,
   jwtExpiresIn: '15m',
   jwtRefreshExpiresIn: '7d',
-  databaseUrl: process.env.DATABASE_URL || 'postgresql://kuhik:kuhik_secret@localhost:5432/kuhik',
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
-  corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3456').split(','),
-  rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
-  rateLimitWindow: process.env.RATE_LIMIT_WINDOW || '1 minute',
+  databaseUrl: env.DATABASE_URL,
+  redisUrl: env.REDIS_URL,
+  corsOrigins: env.CORS_ORIGINS,
+  rateLimitMax: env.RATE_LIMIT_MAX,
+  rateLimitWindow: env.RATE_LIMIT_WINDOW,
+  nodeEnv: env.NODE_ENV,
+  isProduction: env.NODE_ENV === 'production',
 
   // Business rules (configurable per KÜ via Settings Engine)
   defaultReadingWindowStart: 25,
@@ -24,9 +30,9 @@ export const config = {
   defaultQuorum: 50,
 
   // Storage
-  storageType: process.env.STORAGE_TYPE || 'local',
-  uploadDir: process.env.UPLOAD_DIR || './uploads',
-  s3Bucket: process.env.S3_BUCKET || '',
-  s3Region: process.env.S3_REGION || '',
-  s3Endpoint: process.env.S3_ENDPOINT || '',
+  storageType: env.STORAGE_TYPE,
+  uploadDir: env.UPLOAD_DIR,
+  s3Bucket: env.S3_BUCKET || '',
+  s3Region: env.S3_REGION || '',
+  s3Endpoint: env.S3_ENDPOINT || '',
 };

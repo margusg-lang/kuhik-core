@@ -36,9 +36,9 @@ export async function getBuilding(id: string, userId: string) {
 export async function createBuilding(tenantId: string, input: CreateBuildingInput, userId: string) {
   // Verify admin access
   const membership = await prisma.tenantUser.findFirst({
-    where: { tenantId, userId, isActive: true },
+    where: { tenantId, userId, isActive: true, role: { in: ['system_admin', 'admin', 'board_member'] } },
   });
-  if (!membership) throw new AppError(404, 'NOT_FOUND', 'Ühistut ei leitud');
+  if (!membership) throw new AppError(403, 'FORBIDDEN', 'Ainult haldur saab hooneid lisada');
 
   const building = await prisma.building.create({
     data: {
@@ -58,9 +58,9 @@ export async function updateBuilding(id: string, input: UpdateBuildingInput, use
 
   // Verify admin access
   const membership = await prisma.tenantUser.findFirst({
-    where: { tenantId: building.tenantId, userId, isActive: true },
+    where: { tenantId: building.tenantId, userId, isActive: true, role: { in: ['system_admin', 'admin', 'board_member'] } },
   });
-  if (!membership) throw new AppError(404, 'NOT_FOUND', 'Hoonet ei leitud');
+  if (!membership) throw new AppError(403, 'FORBIDDEN', 'Ainult haldur saab hoonet muuta');
 
   const updated = await prisma.building.update({
     where: { id },
