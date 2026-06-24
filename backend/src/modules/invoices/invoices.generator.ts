@@ -4,6 +4,7 @@
 
 import { prisma } from '../../index.js';
 import { AppError } from '../../plugins/error-handler.js';
+import { createJournalService } from '../accounting/journal.service.js';
 
 let invoiceCounter = 1;
 
@@ -69,6 +70,23 @@ export async function generateInvoicesFromAllocation(allocationRunId: string) {
     throw new AppError(400, 'ZERO_ALLOCATION', 'Jaotuste summa on null — ei saa arveid genereerida');
   }
 
+  // Pre-load chart accounts for journal posting
+  const receivableAccount = await prisma.chartAccount.findFirst({
+    where: {
+      tenantId: run.tenantId,
+      accountClass: { code: { contains: 'receivable' } },
+      isActive: true,
+    },
+    orderBy: { accountNumber: 'asc' },
+  });
+  const incomeAccount = await prisma.chartAccount.findFirst({
+    where: {
+      tenantId: run.tenantId,
+      accountClass: { code: { contains: 'revenue' } },
+      isActive: true,
+    },
+    orderBy: { accountNumber: 'asc' },
+  });
   // Group allocation items by apartment
   const byApartment = new Map<string, AllocationItemWithApartment[]>();
   for (const item of run.items) {
@@ -96,6 +114,8 @@ export async function generateInvoicesFromAllocation(allocationRunId: string) {
         }
       }
 
+      const journalService = receivableAccount && incomeAccount ? createJournalService(tx as any) : null;
+
       const invoice = await tx.kuhikInvoice.create({
         data: {
           tenantId: run.tenantId,
@@ -116,6 +136,23 @@ export async function generateInvoicesFromAllocation(allocationRunId: string) {
         },
         include: { items: true, apartment: { select: { unitLabel: true } } },
       });
+
+      // Post double-entry journal entry for this invoice
+      if (journalService && invoice.status === 'draft') {
+        try {
+          await journalService.postInvoice({
+            tenantId: run.tenantId,
+            invoiceId: invoice.id,
+            apartmentId,
+            totalAmount: roundedTotal,
+            receivableAccountId: receivableAccount!.id,
+            incomeAccountId: incomeAccount!.id,
+          });
+        } catch (e) {
+          // Non-blocking: invoice created, journal can be fixed manually
+          console.warn(`[Journal] Warning for invoice ${invoice.id}:`, (e as Error).message);
+        }
+      }
 
       invoices.push(invoice);
     }

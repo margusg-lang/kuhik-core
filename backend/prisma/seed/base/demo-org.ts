@@ -6,6 +6,7 @@ import { getPrisma } from "../utils/db.js";
 import { createOrg, createUserWithTenantRole } from "../utils/helpers.js";
 import { setSeedIds, getSeedIds } from "../utils/ids.js";
 import { seedFinancialMasterData } from "../financial-master-data.js";
+import { seedChartAccounts } from "../chart-accounts.js";
 
 export async function seedDemoOrg(): Promise<{ tenantId: string; userId: string; tenantUserId: string }> {
   const prisma = getPrisma();
@@ -45,6 +46,9 @@ export async function seedDemoOrg(): Promise<{ tenantId: string; userId: string;
 
   // Seed financial classification master data for the new tenant
   await seedFinancialMasterData({ tenantId: tenant.id });
+
+  // Seed standard Estonian chart of accounts
+  await seedChartAccounts(tenant.id);
 
   const passwordHash = await bcrypt.hash("admin123", 10);
   const { user, tenantUser } = await createUserWithTenantRole({

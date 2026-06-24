@@ -30,6 +30,7 @@ import { registerAllocationRoutes } from './modules/allocation/allocation.routes
 import { registerInvoiceRoutes } from './modules/invoices/invoices.routes.js';
 import { registerPaymentRoutes } from './modules/payments/payments.routes.js';
 import { registerMeRoutes } from './modules/me/me.routes.js';
+import { registerAccountingRoutes } from './modules/accounting/accounting.routes.js';
 
 // Initialize Prisma
 export const prisma = new PrismaClient();
@@ -138,6 +139,9 @@ async function bootstrap(): Promise<void> {
 
     // WAVE 8 — RESIDENT SELF-SERVICE (read-only)
     await registerMeRoutes(scopedApp);
+
+    // WAVE D — ACCOUNTING REPORTS (read-only)
+    await registerAccountingRoutes(scopedApp);
   });
 
   // ============================================================
@@ -163,6 +167,7 @@ async function bootstrap(): Promise<void> {
     app.log.info('   Wave 7: payment tracking routes active');
     app.log.info('   Wave 8: resident self-service routes active');
     app.log.info('   Wave 9: production hardening active');
+    app.log.info('   Wave D: accounting reports active');
   } catch (err) {
     app.log.error(err);
     await prisma.$disconnect();

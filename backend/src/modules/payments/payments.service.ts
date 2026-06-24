@@ -1,29 +1,133 @@
 // kuhik-core/backend/src/modules/payments/payments.service.ts
-// Wave C: Financial State Layer
-// ReceivableCreation, PaymentAllocation (FIFO), Balance, PenaltyEngine
+// Wave 7 + Wave C: Payment tracking + Financial State Layer
+//
+// This module provides both the simple CRUD operations for payments (Wave 7)
+// and the advanced financial state management (Wave C):
+// - Receivable creation from charge lines
+// - Payment allocation (FIFO)
+// - Balance computation
+// - Penalty engine
+// - Traceability chain
 //
 // CRITICAL: Wave C MUST NOT touch allocation logic or recompute Wave B.
 
+import { prisma } from '../../index.js';
+import { requireTenantAccess } from '../../lib/authz.js';
+import { AppError } from '../../plugins/error-handler.js';
 import { PrismaClient } from "@prisma/client";
 import { roundCents } from "../allocation/allocation.engine.js";
+import { createJournalService } from '../accounting/journal.service.js';
 
-// Can be used as standalone or injected
 type TxClient = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
 // ===========================================================================
-// 1. RECEIVABLE CREATION SERVICE (ChargeLine → Receivable)
+// WAVE 7 — SIMPLE PAYMENT CRUD
 // ===========================================================================
-//
-// Idempotent: one ChargeLine → exactly one Receivable.
-// NEVER recomputes allocation logic.
+
+export async function addPayment(invoiceId: string, data: { amount: number; method?: string; reference?: string | null }, userId: string) {
+  const invoice = await prisma.kuhikInvoice.findUnique({
+    where: { id: invoiceId },
+    select: { tenantId: true, apartmentId: true, totalAmount: true, paidAmount: true, status: true },
+  });
+  if (!invoice) throw new AppError(404, 'NOT_FOUND', 'Arvet ei leitud');
+  await requireTenantAccess(invoice.tenantId, userId);
+
+  // Validate no overpayment
+  const newPaid = (invoice.paidAmount || 0) + data.amount;
+  if (newPaid > invoice.totalAmount + 0.01) {
+    throw new AppError(400, 'OVERPAYMENT', 'Makse summa ületab arve saldot');
+  }
+
+  const payment = await prisma.payment.create({
+    data: {
+      tenantId: invoice.tenantId,
+      apartmentId: invoice.apartmentId,
+      invoiceId,
+      amount: data.amount,
+      method: data.method || 'bank_transfer',
+      reference: data.reference || null,
+      paymentDate: new Date(),
+      status: 'received',
+      allocationState: 'unallocated',
+    },
+  });
+
+  // Recalc invoice status
+  const newStatus = newPaid >= invoice.totalAmount - 0.01 ? 'paid' : (newPaid > 0 ? 'partially_paid' : 'issued');
+  await prisma.kuhikInvoice.update({
+    where: { id: invoiceId },
+    data: { paidAmount: newPaid, status: newStatus },
+  });
+
+  // Post double-entry journal entry for this payment
+  try {
+    const cashAccount = await prisma.chartAccount.findFirst({
+      where: { tenantId: invoice.tenantId, accountClass: { code: { contains: 'cash' } }, isActive: true },
+      orderBy: { accountNumber: 'asc' },
+    });
+    const receivableAccount = await prisma.chartAccount.findFirst({
+      where: { tenantId: invoice.tenantId, accountClass: { code: { contains: 'receivable' } }, isActive: true },
+      orderBy: { accountNumber: 'asc' },
+    });
+    if (cashAccount && receivableAccount) {
+      const journalService = createJournalService(prisma as any);
+      await journalService.postPayment({
+        tenantId: invoice.tenantId,
+        paymentId: payment.id,
+        apartmentId: invoice.apartmentId || '',
+        amount: data.amount,
+        cashAccountId: cashAccount.id,
+        receivableAccountId: receivableAccount.id,
+      });
+    }
+  } catch (e) {
+    // Non-blocking: payment recorded, journal can be fixed manually
+    console.warn(`[Journal] Warning for payment ${payment.id}:`, (e as Error).message);
+  }
+
+  // Run FIFO allocation using Wave C service
+  try {
+    const allocService = new PaymentAllocationService(prisma as any);
+    await allocService.allocateFifo(payment.id);
+  } catch (e) {
+    // Non-blocking: payment recorded, allocation can be retried
+    console.warn(`[Payment] FIFO allocation warning for ${payment.id}:`, (e as Error).message);
+  }
+
+  return payment;
+}
+
+export async function listInvoicePayments(invoiceId: string, userId: string) {
+  const invoice = await prisma.kuhikInvoice.findUnique({ where: { id: invoiceId } });
+  if (!invoice) throw new AppError(404, 'NOT_FOUND', 'Arvet ei leitud');
+  await requireTenantAccess(invoice.tenantId, userId);
+
+  return prisma.payment.findMany({
+    where: { invoiceId },
+    orderBy: { paymentDate: 'desc' },
+  });
+}
+
+export async function listAllPayments(orgId: string, userId: string) {
+  await requireTenantAccess(orgId, userId);
+
+  return prisma.payment.findMany({
+    where: { tenantId: orgId },
+    orderBy: { paymentDate: 'desc' },
+    include: {
+      invoice: { select: { invoiceNumber: true } },
+      apartment: { select: { unitLabel: true } },
+    },
+  });
+}
+
+// ===========================================================================
+// WAVE C — RECEIVABLE CREATION SERVICE
+// ===========================================================================
 
 export class ReceivableCreationService {
   constructor(private tx: TxClient) {}
 
-  /**
-   * Create receivables from charge lines. Idempotent — skips already-created.
-   * @returns Array of created Receivable ids
-   */
   async createFromChargeLines(chargeLineIds: string[]): Promise<string[]> {
     if (chargeLineIds.length === 0) return [];
 
@@ -55,7 +159,7 @@ export class ReceivableCreationService {
           status: "open",
           periodYear: cl.periodYear,
           periodMonth: cl.periodMonth,
-          dueDate: null, // can be set by invoice flow
+          dueDate: null,
         },
       });
 
@@ -74,19 +178,12 @@ export class ReceivableCreationService {
 }
 
 // ===========================================================================
-// 2. PAYMENT ALLOCATION SERVICE (FIFO)
+// WAVE C — PAYMENT ALLOCATION SERVICE (FIFO)
 // ===========================================================================
-//
-// Allocates a payment across open receivables using FIFO (oldest first).
-// Deterministic, no floating drift, no over-allocation.
 
 export class PaymentAllocationService {
   constructor(private tx: TxClient) {}
 
-  /**
-   * Allocate a payment to open receivables using FIFO.
-   * @returns Array of PaymentAllocation ids
-   */
   async allocateFifo(paymentId: string): Promise<string[]> {
     const payment = await this.tx.payment.findUnique({
       where: { id: paymentId },
@@ -96,7 +193,6 @@ export class PaymentAllocationService {
 
     const apartmentId = payment.apartmentId;
     if (!apartmentId) {
-      // Payment without apartment — cannot auto-allocate
       await this.tx.payment.update({
         where: { id: paymentId },
         data: { allocationState: "unallocated" },
@@ -104,7 +200,6 @@ export class PaymentAllocationService {
       return [];
     }
 
-    // Fetch open receivables ordered by dueDate → createdAt (FIFO)
     const receivables = await this.tx.receivable.findMany({
       where: {
         tenantId: payment.tenantId,
@@ -169,9 +264,7 @@ export class PaymentAllocationService {
       });
     }
 
-    // Execute in transaction
     for (const alloc of allocations) {
-      // Upsert — idempotent: (paymentId, receivableId) unique
       await this.tx.paymentAllocation.upsert({
         where: {
           paymentId_receivableId: {
@@ -195,7 +288,6 @@ export class PaymentAllocationService {
       });
     }
 
-    // Update payment allocation state
     const totalAllocated = allocations.reduce((s, a) => s + a.amountAllocated, 0);
     const allocState = totalAllocated >= payment.amount ? "allocated" : "partial";
     await this.tx.payment.update({
@@ -208,10 +300,8 @@ export class PaymentAllocationService {
 }
 
 // ===========================================================================
-// 3. BALANCE SERVICE
+// WAVE C — BALANCE SERVICE
 // ===========================================================================
-//
-// Balance = Receivables - Payments + Penalties (computed, not stored).
 
 export class BalanceService {
   constructor(private tx: TxClient) {}
@@ -270,30 +360,18 @@ export class BalanceService {
 }
 
 // ===========================================================================
-// 4. PENALTY ENGINE
+// WAVE C — PENALTY ENGINE
 // ===========================================================================
-//
-// Scans overdue receivables and generates penalty entries.
-// Idempotent: no duplicate (receivableId, periodYear, periodMonth).
 
 export class PenaltyEngine {
   constructor(private tx: TxClient) {}
 
-  /**
-   * Generate penalties for overdue receivables.
-   * @param tenantId
-   * @param periodYear
-   * @param periodMonth
-   * @param annualRate annual interest rate (e.g. 0.08 = 8%)
-   * @returns number of penalty entries created
-   */
   async generatePenalties(
     tenantId: string,
     periodYear: number,
     periodMonth: number,
     annualRate: number,
   ): Promise<number> {
-    // Find open/partial receivables that are overdue
     const overdueReceivables = await this.tx.receivable.findMany({
       where: {
         tenantId,
@@ -306,7 +384,6 @@ export class PenaltyEngine {
 
     if (overdueReceivables.length === 0) return 0;
 
-    // Check for duplicates: which (receivableId, periodYear, periodMonth) already exist
     const existingPenalties = await this.tx.penaltyEntry.findMany({
       where: {
         tenantId,
@@ -344,7 +421,6 @@ export class PenaltyEngine {
         },
       });
 
-      // Optionally create a receivable for the penalty
       await this.tx.receivable.create({
         data: {
           tenantId,
@@ -369,7 +445,7 @@ export class PenaltyEngine {
 }
 
 // ===========================================================================
-// 5. TRACEABILITY — full chain from Receivable back to Cost
+// WAVE C — TRACEABILITY
 // ===========================================================================
 
 export async function getReceivableTraceability(
