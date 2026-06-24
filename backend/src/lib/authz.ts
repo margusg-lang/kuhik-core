@@ -1,7 +1,7 @@
 // kuhik-core/backend/src/lib/authz.ts
 // Organization-scoped authorization helpers
 
-import { prisma } from '../index.js';
+import { prisma } from './prisma.js';
 import { AppError } from '../plugins/error-handler.js';
 
 // Role hierarchy used for access control

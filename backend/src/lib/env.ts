@@ -3,7 +3,7 @@
 // No defaults for production-sensitive values
 
 export interface EnvConfig {
-  NODE_ENV: 'development' | 'staging' | 'production';
+  NODE_ENV: 'development' | 'staging' | 'production' | 'test';
   PORT: number;
   HOST: string;
   DATABASE_URL: string;
@@ -39,8 +39,8 @@ function optionalEnv(key: string, defaultValue?: string): string | undefined {
 
 export function loadEnv(): EnvConfig {
   const nodeEnv = optionalEnv('NODE_ENV', 'development') as EnvConfig['NODE_ENV'];
-  if (!['development', 'staging', 'production'].includes(nodeEnv)) {
-    console.error(`${ERR_PREFIX}: NODE_ENV must be one of: development, staging, production (got: ${nodeEnv})`);
+  if (!['development', 'staging', 'production', 'test'].includes(nodeEnv)) {
+    console.error(`${ERR_PREFIX}: NODE_ENV must be one of: development, staging, production, test (got: ${nodeEnv})`);
     process.exit(1);
   }
 

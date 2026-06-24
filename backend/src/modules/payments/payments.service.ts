@@ -11,7 +11,7 @@
 //
 // CRITICAL: Wave C MUST NOT touch allocation logic or recompute Wave B.
 
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 import { requireTenantAccess } from '../../lib/authz.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { PrismaClient } from "@prisma/client";

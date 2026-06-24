@@ -3,7 +3,7 @@
 
 import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 
 interface LoginBody {
   username: string;

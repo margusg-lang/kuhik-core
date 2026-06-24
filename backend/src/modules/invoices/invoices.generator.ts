@@ -2,7 +2,7 @@
 // Takes allocation results → generates invoice records per apartment
 // Wave 9: Transaction-safe, validated, invariant-checked
 
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { createJournalService } from '../accounting/journal.service.js';
 

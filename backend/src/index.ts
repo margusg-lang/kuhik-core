@@ -31,9 +31,9 @@ import { registerInvoiceRoutes } from './modules/invoices/invoices.routes.js';
 import { registerPaymentRoutes } from './modules/payments/payments.routes.js';
 import { registerMeRoutes } from './modules/me/me.routes.js';
 import { registerAccountingRoutes } from './modules/accounting/accounting.routes.js';
+import { prisma } from './lib/prisma.js';
 
-// Initialize Prisma
-export const prisma = new PrismaClient();
+export { prisma };
 
 // Build Fastify instance — production logger is JSON, dev is pretty
 const app = Fastify({

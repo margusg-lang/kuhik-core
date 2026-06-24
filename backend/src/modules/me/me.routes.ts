@@ -3,7 +3,7 @@
 // No new business logic — only exposes existing User + TenantUser data
 
 import { FastifyInstance } from 'fastify';
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 
 export async function registerMeRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', app.authenticate);

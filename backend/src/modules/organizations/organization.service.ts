@@ -1,7 +1,7 @@
 // kuhik-core/backend/src/modules/organizations/organization.service.ts
 // Service layer for organization CRUD
 
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 import type { CreateOrganizationInput, UpdateOrganizationInput } from './organization.schema.js';
 import { AppError } from '../../plugins/error-handler.js';
 

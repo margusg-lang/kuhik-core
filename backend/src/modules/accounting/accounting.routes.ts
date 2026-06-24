@@ -6,7 +6,7 @@
 // This ensures reports are auditable and match the posted journal.
 
 import { FastifyInstance } from 'fastify';
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 import { requireTenantAccess } from '../../lib/authz.js';
 import { createReportsService } from './reports.service.js';
 

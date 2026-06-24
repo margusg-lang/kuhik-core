@@ -3,7 +3,7 @@
 // Chain: Cost → AllocationRun → AllocationItem → ChargeLine
 // Gate validation: determinism, ordering, rounding, traceability, idempotency
 
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 import { guardPeriod, PeriodStatus, assertOperationAllowed } from '../../guards/period-guard.js';
 
 export type AllocationMethod = 'equal' | 'ownership_share' | 'area' | 'heated_area' | 'meter_based' | 'manual';

@@ -1,6 +1,6 @@
 // kuhik-core/backend/src/modules/apartment-meters/meter.service.ts
 
-import { prisma } from '../../index.js';
+import { prisma } from '../../lib/prisma.js';
 import { requireTenantAdmin, assertTenantScope } from '../../lib/authz.js';
 import { AppError } from '../../plugins/error-handler.js';
 import type { CreateMeterInput, UpdateMeterInput } from './meter.schema.js';
