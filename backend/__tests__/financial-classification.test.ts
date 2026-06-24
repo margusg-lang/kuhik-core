@@ -29,11 +29,28 @@ async function createTestTenant() {
 }
 
 async function cleanup(tenantId: string) {
-  // Delete in dependency order
-  await prisma.chartAccount.deleteMany({ where: { tenantId } });
-  await prisma.costCategory.deleteMany({ where: { tenantId } });
-  await prisma.cashflowGroup.deleteMany({ where: { tenantId } });
-  await prisma.accountClass.deleteMany({ where: { tenantId } });
+  // Delete in dependency order — raw SQL for widest FK constraints since
+  // Prisma doesn't support nested deleteMany where for deeply related tables
+  await prisma.$executeRawUnsafe(`DELETE FROM penalty_entries WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM payment_allocations WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM payments WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM receivables WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM charge_lines WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM allocation_items WHERE run_id IN (SELECT id FROM allocation_runs WHERE tenant_id = $1)`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM allocation_run_costs WHERE run_id IN (SELECT id FROM allocation_runs WHERE tenant_id = $1)`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM allocation_runs WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM allocation_shares WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM allocation_rules WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM journal_entry_lines WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM journal_entries WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM chart_accounts WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM cost_categories WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM cashflow_groups WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM account_classes WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM costs WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM resource_types WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM apartments WHERE tenant_id = $1`, tenantId);
+  await prisma.$executeRawUnsafe(`DELETE FROM buildings WHERE tenant_id = $1`, tenantId);
   await prisma.tenant.delete({ where: { id: tenantId } });
 }
 
