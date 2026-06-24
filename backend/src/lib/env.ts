@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 // kuhik-core/backend/src/lib/env.ts
 // Wave 9: Centralized environment validation — fail-fast on misconfiguration
 // No defaults for production-sensitive values

@@ -22,7 +22,7 @@ export async function runAllocation(tenantId: string, input: RunAllocationInput,
       periodStart,
       periodEnd,
       status: 'draft',
-      meta: { summary: result.summary },
+      notes: `Allocation: ${result.summary.ruleName}, total: ${result.summary.totalCost}, remainder: ${result.summary.remainder}`,
       items: {
         create: result.items.map(item => ({
           apartmentId: item.apartmentId,

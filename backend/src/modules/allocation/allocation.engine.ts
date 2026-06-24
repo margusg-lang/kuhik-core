@@ -89,10 +89,37 @@ export async function executeAllocation(input: AllocationInput): Promise<{
   if (!rule.isActive) throw new Error(`AllocationRule is not active: ${ruleId}`);
 
   // 2. Get source costs — ordered by id for determinism
-  const costs = await prisma.cost.findMany({
+  // Support both legacy Cost and new UtilityCost models
+  let costs = await prisma.cost.findMany({
     where: { id: { in: costIds }, tenantId, status: { not: 'cancelled' } },
     orderBy: { id: 'asc' },
   });
+  if (costs.length === 0) {
+    // Try UtilityCost table if not found in Cost (fallback for merged costs)
+    const utilityCosts = await prisma.utilityCost.findMany({
+      where: { id: { in: costIds }, tenantId },
+      orderBy: { id: 'asc' },
+    });
+    costs = utilityCosts.map(uc => ({
+      id: uc.id,
+      tenantId: uc.tenantId,
+      resourceTypeId: '',
+      allocationRuleId: null,
+      costCategoryId: null,
+      description: uc.description || '',
+      amount: uc.totalAmount,
+      taxAmount: 0,
+      totalAmount: uc.totalAmount,
+      periodYear: uc.periodStart.getFullYear(),
+      periodMonth: uc.periodStart.getMonth() + 1,
+      supplierName: uc.supplierName,
+      invoiceNumber: null,
+      status: 'pending',
+      metadata: null,
+      createdAt: uc.createdAt,
+      updatedAt: uc.updatedAt,
+    }));
+  }
   if (costs.length === 0) throw new Error('No source costs found');
 
   const totalSourceAmount = costs.reduce((s, c) => s + c.totalAmount, 0);
@@ -492,23 +519,56 @@ export async function computeAllocation(
   summary: { totalCost: number; totalAllocated: number; remainder: number; ruleName: string };
   items: Array<{ apartmentId: string; costType: string; method: string; amount: number; consumptionPct: number | null }>;
 }> {
-  // Find active allocation rule
-  const rule = await prisma.allocationRule.findFirst({
+  // Find active allocation rule — auto-create default equal rule if none exists
+  let rule = await prisma.allocationRule.findFirst({
     where: { tenantId, isActive: true },
     orderBy: { priority: 'asc' },
   });
-  if (!rule) throw new Error(`No active allocation rule found for tenant ${tenantId}`);
+  if (!rule) {
+    rule = await prisma.allocationRule.create({
+      data: {
+        tenantId,
+        name: 'Default equal split',
+        method: 'equal',
+        targetScope: 'building',
+        isActive: true,
+        priority: 0,
+      },
+    });
+    console.log(`[Allocation] Auto-created default rule ${rule.id} for tenant ${tenantId}`);
+  }
 
-  // Find costs in period
-  const costs = await prisma.cost.findMany({
-    where: {
-      tenantId,
-      periodYear: periodStart.getFullYear(),
-      periodMonth: periodStart.getMonth() + 1,
-      status: { not: 'cancelled' },
-    },
-    orderBy: { id: 'asc' },
-  });
+  // Find costs in period — check both cost models (new UtilityCost + legacy Cost)
+  const [legacyCosts, utilityCosts] = await Promise.all([
+    prisma.cost.findMany({
+      where: { tenantId, status: { not: 'cancelled' } },
+      orderBy: { id: 'asc' },
+    }),
+    prisma.utilityCost.findMany({
+      where: { tenantId },
+      orderBy: { id: 'asc' },
+    }),
+  ]);
+  // Merge: legacy costs take precedence, utility costs supplement
+  const costs = legacyCosts.length > 0 ? legacyCosts : utilityCosts.map(uc => ({
+    id: uc.id,
+    tenantId: uc.tenantId,
+    resourceTypeId: '',
+    allocationRuleId: null,
+    costCategoryId: null,
+    description: uc.description || '',
+    amount: uc.totalAmount,
+    taxAmount: 0,
+    totalAmount: uc.totalAmount,
+    periodYear: uc.periodStart.getFullYear(),
+    periodMonth: uc.periodStart.getMonth() + 1,
+    supplierName: uc.supplierName,
+    invoiceNumber: null,
+    status: 'pending',
+    metadata: null,
+    createdAt: uc.createdAt,
+    updatedAt: uc.updatedAt,
+  }));
   if (costs.length === 0) throw new Error(`No costs found for period`);
 
   const result = await executeAllocation({

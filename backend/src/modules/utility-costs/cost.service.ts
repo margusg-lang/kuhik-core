@@ -22,7 +22,8 @@ export async function getCost(id: string, userId: string) {
 
 export async function createCost(tenantId: string, input: CreateCostInput, userId: string) {
   await requireTenantAdmin(tenantId, userId);
-  const cost = await prisma.utilityCost.create({
+  // Write to UtilityCost (new model) and Cost (legacy model) for backward compatibility
+  const utilityCost = await prisma.utilityCost.create({
     data: {
       tenantId,
       type: input.type,
@@ -34,7 +35,37 @@ export async function createCost(tenantId: string, input: CreateCostInput, userI
       description: input.description || null,
     },
   });
-  return cost;
+
+  // Also create legacy Cost record for allocation engine compatibility
+  try {
+    const periodStart = new Date(input.periodStart);
+    // Find or create a default resource type for the tenant
+    let rt = await prisma.resourceType.findFirst({
+      where: { tenantId, code: 'default' },
+    });
+    if (!rt) {
+      rt = await prisma.resourceType.create({
+        data: { tenantId, name: 'Default', code: 'default', category: 'utility' },
+      });
+    }
+    await prisma.cost.create({
+      data: {
+        tenantId,
+        resourceTypeId: rt.id,
+        description: input.description || `${input.type} cost`,
+        amount: input.totalAmount,
+        totalAmount: input.totalAmount,
+        periodYear: periodStart.getFullYear(),
+        periodMonth: periodStart.getMonth() + 1,
+        status: 'pending',
+      },
+    });
+  } catch (e) {
+    // Non-blocking: legacy cost record is optional
+    console.warn(`[Cost] Warning: could not create legacy Cost record:`, (e as Error).message);
+  }
+
+  return utilityCost;
 }
 
 export async function updateCost(id: string, input: UpdateCostInput, userId: string) {
