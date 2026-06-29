@@ -1,0 +1,22 @@
+{
+  "name": "kuhik",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Apartment association operating system",
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:backend": "pnpm --filter @kuhik/backend dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "format": "prettier --check .",
+    "db:generate": "pnpm --filter @kuhik/backend db:generate",
+    "db:validate": "pnpm --filter @kuhik/backend db:validate",
+    "db:migrate:dev": "pnpm --filter @kuhik/backend db:migrate:dev"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2"
+  }
+}

@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EntityStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  LOCKED
+}
+
+enum UserRole {
+  SYSTEM_ADMIN
+  ORGANIZATION_ADMIN
+  MANAGER
+  ACCOUNTANT
+  BOARD_MEMBER
+  RESIDENT
+  AUDITOR
+}
+
+model Organization {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String
+  registryCode String?      @unique @map("registry_code")
+  vatNumber    String?      @map("vat_number")
+  email        String?
+  phone        String?
+  language     String       @default("et")
+  timezone     String       @default("Europe/Tallinn")
+  status       EntityStatus @default(ACTIVE)
+  version      Int          @default(1)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  people       Person[]
+  users        User[]
+
+  @@index([status])
+  @@map("organizations")
+}
+
+model Person {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String?      @map("organization_id") @db.Uuid
+  firstName      String       @map("first_name")
+  lastName       String       @map("last_name")
+  personalCode   String?      @map("personal_code")
+  email          String?
+  phone          String?
+  language       String       @default("et")
+  status         EntityStatus @default(ACTIVE)
+  version        Int          @default(1)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user           User?
+
+  @@unique([organizationId, personalCode])
+  @@index([organizationId])
+  @@index([status])
+  @@map("people")
+}
+
+model User {
+  id                 String        @id @default(uuid()) @db.Uuid
+  organizationId     String?       @map("organization_id") @db.Uuid
+  personId           String        @unique @map("person_id") @db.Uuid
+  email              String        @unique
+  passwordHash       String        @map("password_hash")
+  role               UserRole
+  status             UserStatus    @default(ACTIVE)
+  tokenVersion       Int           @default(1) @map("token_version")
+  mfaEnabled         Boolean       @default(false) @map("mfa_enabled")
+  lastLoginAt        DateTime?     @map("last_login_at")
+  failedLoginCount   Int           @default(0) @map("failed_login_count")
+  lockedUntil        DateTime?     @map("locked_until")
+  version            Int           @default(1)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  organization       Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  person             Person        @relation(fields: [personId], references: [id], onDelete: Restrict)
+  sessions           UserSession[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([role])
+  @@map("users")
+}
+
+model UserSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  lastUsedAt       DateTime? @map("last_used_at")
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
